@@ -1,0 +1,227 @@
+// POD Platform — Foundation schema (build step 1)
+// Catalog + Capability matrix + routing inputs. The load-bearing layer:
+// routing, catalog availability, print specs, and the bulk/first-article
+// logic all read off these tables.
+//
+// Stack: Prisma + PostgreSQL (Neon). Bilingual EN/AR is mandatory — every
+// human-facing label carries _en and _ar.
+//
+// NOT in this file (next schema layer): Order, OrderLine, Fulfillment,
+// Shipment, Design, Merchant, StoreConnection, Wallet. This is the catalog
+// + supply side only.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum PrintMethod {
+  DTG          // direct-to-garment
+  DTF          // direct-to-film
+  SUBLIMATION
+  EMBROIDERY   // requires digitization step
+  UV           // hard goods (mugs, phone cases)
+  SCREEN       // screen printing (bulk apparel)
+  PAPER_PRINT  // cards, posters, stationery
+}
+
+enum ProductCategory {
+  APPAREL
+  DRINKWARE
+  PAPER
+  ACCESSORIES
+  HOME
+}
+
+enum PrinterStatus {
+  ACTIVE
+  PAUSED      // temporarily out of routing (e.g. over capacity, holiday)
+  REMOVED     // dropped from network (e.g. refused to honor a defect)
+}
+
+enum PlacementCode {
+  FRONT
+  BACK
+  LEFT_SLEEVE
+  RIGHT_SLEEVE
+  WRAP        // mugs, bottles
+  FULL        // all-over / single-face full print
+}
+
+// ─────────────────────────────────────────────────────────────
+// CATALOG SIDE — what the buyer can order
+// ─────────────────────────────────────────────────────────────
+
+// A product type is the abstract item (t-shirt, mug, business card).
+// It owns its print areas + file specs because those are intrinsic to the
+// product, not to whichever printer fulfills it.
+model ProductType {
+  id        String          @id @default(cuid())
+  slug      String          @unique
+  name_en   String
+  name_ar   String
+  category  ProductCategory
+
+  printAreas   PrintArea[]
+  products     Product[]
+  capabilities PrinterCapability[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// A printable region on a product type, with its production file spec.
+// e.g. t-shirt FRONT @ 12x16in / 150 DPI; mug WRAP @ 8x3in / 300 DPI.
+model PrintArea {
+  id            String      @id @default(cuid())
+  productType   ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+  productTypeId String
+  placement     PlacementCode
+
+  // Production file spec (the "print file", NOT the mockup).
+  width_mm      Float       // actual print dimensions
+  height_mm     Float
+  min_dpi       Int         @default(150)
+  recommended_dpi Int       @default(300)
+  allowed_formats String[]  @default(["PNG", "JPEG"])
+  color_profile String      @default("sRGB")
+  requires_transparency Boolean @default(false) // true for DTG on dark garments
+  bleed_mm      Float       @default(0)
+  max_file_mb   Int         @default(200)
+
+  @@unique([productTypeId, placement])
+}
+
+// A concrete catalog item the buyer sees (a specific styled product the
+// platform lists). Listable only if >=1 ACTIVE capability exists for its type.
+model Product {
+  id            String      @id @default(cuid())
+  productType   ProductType @relation(fields: [productTypeId], references: [id])
+  productTypeId String
+  name_en       String
+  name_ar       String
+  description_en String?
+  description_ar String?
+  retail_price  Decimal     @db.Decimal(10, 2)   // store-set; spread lives above wholesale
+  active        Boolean     @default(true)
+
+  variants      ProductVariant[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Size x color (etc.) of a product.
+model ProductVariant {
+  id        String  @id @default(cuid())
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  sku       String  @unique
+  size      String?
+  color     String?
+  active    Boolean @default(true)
+
+  @@index([productId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// SUPPLY SIDE — printers and the capability matrix
+// ─────────────────────────────────────────────────────────────
+
+model Printer {
+  id        String        @id @default(cuid())
+  name      String
+  status    PrinterStatus @default(ACTIVE)
+
+  // Location — for proximity tiebreaker in routing (weak factor within UAE,
+  // gains weight GCC-wide).
+  emirate   String?
+  country   String        @default("AE")
+  latitude  Float?
+  longitude Float?
+
+  // Hard gate before any routing: no blind-ship confirmation = no orders.
+  blind_ship_confirmed Boolean @default(false)
+  return_address String?
+
+  // Contract / protection flags (mirror §5b of the model spec).
+  contract_signed      Boolean @default(false)
+  accepts_bulk_holdback Boolean @default(false) // 70/30 retention agreed in writing
+
+  // Capacity signal — drives the capacity HARD GATE in routing.
+  // A printer at/over capacity drops out of eligibility entirely.
+  daily_capacity_units Int?    // max units/day this printer can take
+  current_load_units   Int     @default(0) // updated as orders are assigned
+  // Derived eligibility: ACTIVE && blind_ship_confirmed && load < capacity.
+
+  // Quality score — feeds routing once defect data exists (low defect rate
+  // should outrank pure cost: a cheap high-defect printer is a false economy).
+  quality_score Float? // 0..1, nullable until data accrues
+
+  payout_terms String? // free-text for now (e.g. "upfront full <1000 AED; 70/30 bulk")
+
+  capabilities PrinterCapability[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// THE LOAD-BEARING TABLE.
+// One row per (printer x product type x print method) the printer can do.
+// This single table answers three questions at once:
+//   1. ROUTING  — which printers are eligible for a given order line.
+//   2. CATALOG  — a product type is listable iff >=1 ACTIVE row exists.
+//   3. COST     — the wholesale cost used for the cost-primary routing rank.
+// Print SPEC is NOT here — it lives on PrintArea (intrinsic to product+method).
+model PrinterCapability {
+  id            String      @id @default(cuid())
+  printer       Printer     @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  printerId     String
+  productType   ProductType @relation(fields: [productTypeId], references: [id])
+  productTypeId String
+  method        PrintMethod
+
+  // Routing inputs (printer-specific economics).
+  unit_wholesale_cost Decimal @db.Decimal(10, 2)  // base; tiers below may override
+  min_qty       Int     @default(1)
+  max_qty       Int?                              // null = no cap
+  active        Boolean @default(true)
+
+  // EMBROIDERY (and similar) need a digitization step in the order lifecycle.
+  requires_digitization Boolean @default(false)
+
+  // Optional per-capability spec override. Normally null — spec comes from
+  // PrintArea. Populate ONLY if a specific printer needs a different spec for
+  // the same product (rare).
+  spec_override Json?
+
+  // Volume pricing (optional in v1). If present, overrides unit_wholesale_cost
+  // at/above the tier's min_qty.
+  pricingTiers  PricingTier[]
+
+  // A printer can do a product type via multiple methods, but each
+  // (printer, productType, method) combination is unique.
+  @@unique([printerId, productTypeId, method])
+  @@index([productTypeId, method, active]) // routing lookup: eligible printers
+}
+
+// Volume price breaks for a capability (e.g. 25+ units at a lower unit cost).
+// Relevant to the order-1-then-bulk pattern.
+model PricingTier {
+  id           String            @id @default(cuid())
+  capability   PrinterCapability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  capabilityId String
+  min_qty      Int                                  // tier applies at this qty and up
+  unit_cost    Decimal           @db.Decimal(10, 2)
+
+  @@unique([capabilityId, min_qty])
+  @@index([capabilityId])
+}
