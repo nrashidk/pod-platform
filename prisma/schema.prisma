@@ -1,0 +1,17 @@
+// POD Platform — Prisma schema (skeleton).
+//
+// Intentionally empty of models. This scaffold wires Prisma to Neon only.
+// The foundation models (catalog + PrinterCapability matrix) are specified in
+// docs/schema-foundation.prisma and belong to build step 1 — NOT added here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled (PgBouncer) connection
+  directUrl = env("DIRECT_URL")   // direct connection for migrations
+}
+
+// No models yet.
