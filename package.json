@@ -16,7 +16,7 @@
     "test:routing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/routing-smoke.ts",
     "test:order-routing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/order-routing-smoke.ts",
     "test:fulfillment-lifecycle": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/fulfillment-lifecycle-smoke.ts",
-    "test:smoke": "npm run test:seed && npm run test:routing"
+    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
