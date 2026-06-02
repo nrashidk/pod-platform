@@ -7,9 +7,11 @@
 
 import Link from "next/link";
 import type { FulfillmentStatus } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/auth-context";
+import { getOrdersForCaller } from "@/lib/orders-access";
 import { nextFulfillmentStatus } from "@/lib/fulfillment";
 import { getDirection, isLocale, type Locale } from "@/lib/i18n";
+import { LogoutButton } from "@/components/logout-button";
 import {
   fulfillmentStatusLabel,
   methodLabel,
@@ -32,23 +34,20 @@ export default async function OpsPage({
 }: {
   searchParams: Promise<{ lang?: string; err?: string }>;
 }) {
+  // DATA-LAYER GATE (not middleware): this page is OPERATOR-only. requireRole
+  // reads the session server-side and redirects anyone who isn't a signed-in
+  // operator. Independent of middleware — if middleware were bypassed, this
+  // still holds.
+  const ctx = await requireRole("OPERATOR");
+
   const sp = await searchParams;
   const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
   const dir = getDirection(locale);
   const errFulfillmentId = sp.err ?? null;
 
-  const orders = await prisma.order.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      fulfillments: {
-        orderBy: { createdAt: "asc" },
-        include: {
-          printer: true,
-          lines: { include: { product: true, variant: true } },
-        },
-      },
-    },
-  });
+  // Fetch through the scoped accessor (OPERATOR ⇒ all orders). Routing every
+  // read through the authorization layer keeps the gate and the query together.
+  const orders = await getOrdersForCaller(ctx);
 
   return (
     <div dir={dir} lang={locale} className="min-h-screen bg-gray-50 text-gray-900">
@@ -60,7 +59,10 @@ export default async function OpsPage({
             </h1>
             <p className="mt-1 text-sm text-gray-600">{t("subtitle", locale)}</p>
           </div>
-          <LangToggle locale={locale} />
+          <div className="flex items-center gap-3">
+            <LangToggle locale={locale} />
+            <LogoutButton label={t("logout", locale)} />
+          </div>
         </header>
 
         {orders.length === 0 ? (

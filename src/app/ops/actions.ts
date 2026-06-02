@@ -13,9 +13,17 @@ import {
   FirstArticleRequiredError,
   InvalidTransitionError,
 } from "@/lib/fulfillment";
+import { requireRole } from "@/lib/auth-context";
 import { isLocale, type Locale } from "@/lib/i18n";
 
 export async function advanceAction(formData: FormData) {
+  // INDEPENDENT authorization re-check. The page already gates rendering, but a
+  // server action is its own entry point — a forged/replayed POST from a
+  // non-operator (or with no session at all) must be rejected HERE too, not
+  // assumed safe because the UI hid the button. This is the defense-in-depth the
+  // whole phase is about: never trust that an earlier gate ran.
+  await requireRole("OPERATOR");
+
   const fulfillmentId = String(formData.get("fulfillmentId") ?? "");
   const toStatus = String(formData.get("toStatus") ?? "") as FulfillmentStatus;
   const langRaw = String(formData.get("lang") ?? "en");

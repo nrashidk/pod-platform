@@ -22,6 +22,7 @@ const UI = {
   },
   langEN: { en: "English", ar: "English" },
   langAR: { en: "العربية", ar: "العربية" },
+  logout: { en: "Sign out", ar: "تسجيل الخروج" },
   noOrders: {
     en: "No orders yet. Run the demo seed (see README/instructions).",
     ar: "لا توجد طلبات بعد. شغّل بيانات العرض التجريبي.",

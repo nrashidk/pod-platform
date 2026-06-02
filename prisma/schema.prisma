@@ -169,6 +169,7 @@ model Printer {
 
   capabilities PrinterCapability[]
   fulfillments Fulfillment[]      // order layer: fulfillments routed to this printer
+  users        User[]             // back-office PRINTER logins scoped to this printer
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -351,6 +352,7 @@ model Merchant {
   stores        StoreConnection[]
   orders        Order[]
   designs       Design[]
+  users         User[]            // back-office MERCHANT logins scoped to this merchant
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -635,4 +637,118 @@ model PrinterLedgerEntry {
   createdAt   DateTime @default(now())
 
   @@index([printerId, settled])
+}
+
+// ═════════════════════════════════════════════════════════════
+// BACK-OFFICE AUTH / RBAC LAYER  (Better Auth + role scoping)
+//
+// Three INTERNAL roles only — OPERATOR, MERCHANT, PRINTER. NO buyer/customer
+// auth (deferred to the storefront phase). Identity + credentials live in the
+// four Better-Auth tables (User, Session, Account, Verification); the RBAC
+// discriminator (User.role) and the ownership links (merchantId / printerId)
+// are what every server-side query scopes on.
+//
+// OWASP note: authorization is enforced at the DATA layer, never middleware
+// alone (CVE-2025-29927 middleware-bypass defense). The role↔link invariant is
+// also enforced by a DB CHECK constraint hand-added in the migration SQL —
+// belt-and-braces with app-level checks. Sessions are DB-backed (not stateless
+// JWT) so logout/revocation actually invalidates.
+// ═════════════════════════════════════════════════════════════
+
+enum UserRole {
+  OPERATOR // platform staff — full back-office access, links to neither
+  MERCHANT // a store owner — links to exactly one Merchant
+  PRINTER  // a fulfillment provider — links to exactly one Printer
+}
+
+// Better-Auth core identity, extended with the RBAC role + ownership links.
+// A user links to AT MOST ONE of Merchant/Printer; OPERATOR links to neither.
+// The mutual exclusion + role↔link rule is enforced by a CHECK constraint in
+// the migration (see migration.sql) in addition to app-level checks.
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+
+  // RBAC discriminator + ownership scoping (the heart of data-layer auth).
+  role          UserRole
+
+  // Ownership links — nullable + mutually exclusive (see CHECK). The scoping
+  // `where` clauses read these from the SESSION, never from client input.
+  // onDelete: Restrict — a Merchant/Printer with live back-office logins can't
+  // be deleted out from under them (clear FK error instead of orphaned/invalid
+  // rows). Implication for dev seeds noted in the seed step.
+  merchant      Merchant? @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  merchantId    String?
+  printer       Printer?  @relation(fields: [printerId], references: [id], onDelete: Restrict)
+  printerId     String?
+
+  sessions      Session[]
+  accounts      Account[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([merchantId])
+  @@index([printerId])
+}
+
+// Better-Auth DB-backed session. Logout/expiry deletes the row → instant
+// revocation (the reason we do NOT use stateless JWT sessions).
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Better-Auth credential/account record. For email+password the hashed
+// password lives in `password` (Better Auth's default hashing — scrypt).
+// OAuth/token columns are present for adapter-shape compatibility but unused
+// in this phase (no social login).
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  password              String?
+
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Better-Auth bookkeeping (email-verification / reset tokens). Unused UI-wise
+// this phase but required by the adapter shape.
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([identifier])
 }
