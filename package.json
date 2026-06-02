@@ -10,7 +10,11 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:seed": "node prisma/seed.mjs",
+    "test:seed": "node prisma/verify-seed.mjs",
+    "test:routing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/routing-smoke.ts",
+    "test:smoke": "npm run test:seed && npm run test:routing"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
