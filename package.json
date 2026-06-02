@@ -17,13 +17,15 @@
     "test:routing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/routing-smoke.ts",
     "test:order-routing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/order-routing-smoke.ts",
     "test:fulfillment-lifecycle": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/fulfillment-lifecycle-smoke.ts",
-    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle"
+    "test:print-validation": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/print-validation-smoke.ts",
+    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
     "next": "^15.2.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
