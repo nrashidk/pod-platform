@@ -21,6 +21,27 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 // it, like the auth seed — runs under the plain-Node smoke loader too.
 import { prisma } from "./prisma";
 
+// The origins the dev server is reachable under. localhost and 127.0.0.1 are
+// distinct hosts to the browser's same-origin check, so both must be trusted.
+// In a Codespace the forwarded origin is https://<name>-<port>.<domain>.
+function devTrustedOrigins(): string[] {
+  const origins = ["http://localhost:3000", "http://127.0.0.1:3000"];
+
+  const { CODESPACE_NAME, GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN } =
+    process.env;
+  if (CODESPACE_NAME && GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN) {
+    origins.push(
+      `https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`,
+    );
+  }
+
+  // Whatever baseURL is configured to, so an explicit BETTER_AUTH_URL override
+  // is always trusted even if it isn't one of the above.
+  if (process.env.BETTER_AUTH_URL) origins.push(process.env.BETTER_AUTH_URL);
+
+  return [...new Set(origins)];
+}
+
 export const auth = betterAuth({
   // Reuse the app's Prisma client against Neon. provider must match the
   // datasource so Better Auth emits PostgreSQL-correct queries.
@@ -30,6 +51,16 @@ export const auth = betterAuth({
   // keeps the wiring obvious and fails loudly if the env is missing).
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
+
+  // Better Auth rejects any sign-in POST whose Origin header isn't trusted
+  // (CSRF defence) with a 403. baseURL is trusted implicitly, but the dev
+  // server is reachable under several origins that must each be listed or
+  // sign-in fails with a misleading "Invalid origin" 403:
+  //  - http://localhost:3000     (BETTER_AUTH_URL)
+  //  - http://127.0.0.1:3000     (same server, different host — NOT covered
+  //                               by localhost; this was the reported failure)
+  //  - the Codespaces forwarded HTTPS origin, when running in a Codespace.
+  trustedOrigins: devTrustedOrigins(),
 
   emailAndPassword: {
     enabled: true,

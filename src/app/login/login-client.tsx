@@ -30,6 +30,14 @@ const L = {
     en: "Invalid email or password.",
     ar: "بريد إلكتروني أو كلمة مرور غير صحيحة.",
   },
+  origin: {
+    en: "Sign-in was rejected by the server (untrusted origin). This is a configuration issue, not your credentials — try opening the app at http://localhost:3000.",
+    ar: "رفض الخادم تسجيل الدخول (مصدر غير موثوق). هذه مشكلة في الإعداد وليست في بياناتك — جرّب فتح التطبيق على http://localhost:3000.",
+  },
+  serverError: {
+    en: "Sign-in failed due to a server error. Please try again.",
+    ar: "فشل تسجيل الدخول بسبب خطأ في الخادم. يُرجى المحاولة مرة أخرى.",
+  },
   forbidden: {
     en: "You don't have access to that page.",
     ar: "ليست لديك صلاحية الوصول إلى تلك الصفحة.",
@@ -66,17 +74,31 @@ export function LoginClient({
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
+  // null = no error. Otherwise which message to show: a 403 means the server
+  // rejected the request itself (untrusted origin / CSRF), NOT bad credentials,
+  // so we surface a distinct, diagnosable message instead of "invalid".
+  const [error, setError] = useState<"invalid" | "origin" | "serverError" | null>(
+    null,
+  );
   const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(false);
+    setError(null);
     setSubmitting(true);
     const res = await signIn.email({ email, password });
     setSubmitting(false);
     if (res.error) {
-      setError(true);
+      const status = res.error.status;
+      if (status === 403) {
+        // Origin/CSRF rejection — not a credentials problem. (Better Auth's
+        // "Invalid origin" surfaces here as a 403.)
+        setError("origin");
+      } else if (status === 401 || status === 400) {
+        setError("invalid");
+      } else {
+        setError("serverError");
+      }
       return;
     }
     // Operators go straight to the ops console; others land on the signed-in
@@ -170,7 +192,7 @@ export function LoginClient({
               />
               {error && (
                 <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {tr(L.invalid)}
+                  {tr(L[error])}
                 </p>
               )}
               <button
