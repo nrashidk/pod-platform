@@ -14,6 +14,7 @@
     "db:seed": "node prisma/seed.mjs",
     "test:seed": "node prisma/verify-seed.mjs",
     "test:routing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/routing-smoke.ts",
+    "test:order-routing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/order-routing-smoke.ts",
     "test:smoke": "npm run test:seed && npm run test:routing"
   },
   "dependencies": {
