@@ -12,6 +12,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "node prisma/seed.mjs",
+    "db:seed:ops": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/seed-ops-demo.ts",
     "test:seed": "node prisma/verify-seed.mjs",
     "test:routing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/routing-smoke.ts",
     "test:order-routing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/order-routing-smoke.ts",

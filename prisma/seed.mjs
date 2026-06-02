@@ -22,21 +22,63 @@ async function main() {
   console.log("⚠️  Seeding PLACEHOLDER TEST DATA only.\n");
 
   // ── 1. Clean up any prior TEST data (idempotent reseed) ──────
-  // Order matters: delete printers first so their PrinterCapability
-  // rows cascade away, THEN delete product types (PrinterCapability
-  // -> ProductType has no cascade, so capabilities must be gone first).
-  const delCaps = await prisma.printerCapability.deleteMany({
-    where: { printer: { name: { startsWith: "TEST " } } },
+  // CHILD rows BEFORE PARENTS, so a partial run can NEVER strand the
+  // capability matrix (the old order deleted capabilities first, then died on
+  // the Printer/ProductType FKs — leaving routing broken). The two parents we
+  // recreate are TEST Printers and test- ProductTypes; both have inbound FKs
+  // WITHOUT onDelete:Cascade that must be cleared first:
+  //   • Fulfillment.printer        → no cascade  ⇒ clear fulfillments
+  //   • Product.productType        → no cascade  ⇒ clear products
+  //   • PrinterCapability.productType → no cascade ⇒ clear capabilities
+  // We scope to anything referencing the TEST printers / test- types, so this
+  // is safe to run regardless of what test/demo data was left behind.
+
+  // (a) Orders touching a TEST printer (via fulfillment) or a test- product
+  //     type (via line). Deleting the Order cascades its Fulfillments,
+  //     OrderLines, and Shipments (all onDelete:Cascade) — clearing the
+  //     Fulfillment→Printer FK that blocked the old cleanup.
+  const delOrders = await prisma.order.deleteMany({
+    where: {
+      OR: [
+        { fulfillments: { some: { printer: { name: { startsWith: "TEST " } } } } },
+        {
+          lines: {
+            some: { product: { productType: { slug: { startsWith: "test-" } } } },
+          },
+        },
+      ],
+    },
   });
+
+  // (b) Products on a test- product type → cascades their ProductVariants.
+  //     (OrderLine→Product FK has no cascade, but the lines are gone with (a).)
+  const delProducts = await prisma.product.deleteMany({
+    where: { productType: { slug: { startsWith: "test-" } } },
+  });
+
+  // (c) PrinterCapabilities on a TEST printer OR a test- product type — must
+  //     precede the ProductTypes they reference (that FK has no cascade).
+  const delCaps = await prisma.printerCapability.deleteMany({
+    where: {
+      OR: [
+        { printer: { name: { startsWith: "TEST " } } },
+        { productType: { slug: { startsWith: "test-" } } },
+      ],
+    },
+  });
+
+  // (d) Now the parents are unreferenced and delete cleanly.
   const delPrinters = await prisma.printer.deleteMany({
     where: { name: { startsWith: "TEST " } },
   });
   const delTypes = await prisma.productType.deleteMany({
     where: { slug: { startsWith: "test-" } },
   });
+
   console.log(
-    `Cleanup: removed ${delCaps.count} capabilities, ` +
-      `${delPrinters.count} printers, ${delTypes.count} product types.\n`
+    `Cleanup: removed ${delOrders.count} orders, ${delProducts.count} products, ` +
+      `${delCaps.count} capabilities, ${delPrinters.count} printers, ` +
+      `${delTypes.count} product types.\n`
   );
 
   // ── 2. ProductTypes + their intrinsic PrintAreas ─────────────

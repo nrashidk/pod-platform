@@ -57,6 +57,19 @@ const ALLOWED_NEXT: Record<string, FulfillmentStatus[]> = {
   CLOSED: [],
 };
 
+/**
+ * The single legal next status from `status`, or null if the Fulfillment has no
+ * forward move — terminal CLOSED, excluded CANCELLED, or any branch/pre-routing
+ * state absent from ALLOWED_NEXT. Single source of truth for "can this advance?":
+ * the ops UI uses it to render/hide the advance control instead of re-encoding
+ * the lifecycle table.
+ */
+export function nextFulfillmentStatus(
+  status: FulfillmentStatus
+): FulfillmentStatus | null {
+  return (ALLOWED_NEXT[status] ?? [])[0] ?? null;
+}
+
 export class InvalidTransitionError extends Error {
   readonly from: FulfillmentStatus;
   readonly to: FulfillmentStatus;
