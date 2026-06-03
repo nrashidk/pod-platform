@@ -45,6 +45,7 @@ const L = {
   signedInAs: { en: "Signed in as", ar: "مسجَّل الدخول باسم" },
   roleLabel: { en: "Role", ar: "الدور" },
   goToOps: { en: "Go to operations", ar: "الذهاب إلى العمليات" },
+  goToPrinter: { en: "Go to my fulfillments", ar: "الذهاب إلى عمليات التنفيذ الخاصة بي" },
   logout: { en: "Sign out", ar: "تسجيل الخروج" },
   noView: {
     en: "Your dashboard isn't built yet — this phase only covers sign-in.",
@@ -101,11 +102,15 @@ export function LoginClient({
       }
       return;
     }
-    // Operators go straight to the ops console; others land on the signed-in
-    // card (no dashboard yet).
+    // Route each role to its own surface: operators to the ops console, printers
+    // to their fulfillment queue. Merchants have no dashboard yet, so they land
+    // on the signed-in card.
     const role = (res.data?.user as { role?: string } | undefined)?.role;
     if (role === "OPERATOR") {
       router.push("/ops");
+      router.refresh();
+    } else if (role === "PRINTER") {
+      router.push("/printer");
       router.refresh();
     } else {
       router.refresh();
@@ -155,6 +160,13 @@ export function LoginClient({
                   className="block rounded-md bg-gray-900 px-4 py-2 text-center text-sm font-medium text-white hover:bg-gray-700"
                 >
                   {tr(L.goToOps)}
+                </Link>
+              ) : user.role === "PRINTER" ? (
+                <Link
+                  href="/printer"
+                  className="block rounded-md bg-gray-900 px-4 py-2 text-center text-sm font-medium text-white hover:bg-gray-700"
+                >
+                  {tr(L.goToPrinter)}
                 </Link>
               ) : (
                 <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">

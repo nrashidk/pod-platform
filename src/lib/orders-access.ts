@@ -70,3 +70,40 @@ export async function getOrdersForCaller(ctx: AuthContext) {
     }
   }
 }
+
+// The include shape the printer view renders from: the parent order (for the
+// human-facing ref + currency) and the fulfillment's own lines.
+const FULFILLMENT_INCLUDE = {
+  order: true,
+  lines: { include: { product: true, variant: true } },
+} as const;
+
+// Return the Fulfillments assigned to the calling PRINTER — scoped at the query
+// level to ctx.printerId. Unlike getOrdersForCaller (which returns whole orders,
+// and for a SPLIT order would include sibling fulfillments belonging to other
+// printers), this returns ONLY the caller's own fulfillment rows. A printer must
+// never see another printer's work.
+//
+// SECURITY-CRITICAL: printerId comes from the session context, and we throw
+// (never fall through) on a missing id. Prisma treats
+// `where: { printerId: undefined }` as "no filter" and would return EVERY
+// fulfillment — a silent full-scope leak. The DB CHECK makes a null impossible
+// for a PRINTER, but we defend in depth regardless. Restricted to the PRINTER
+// role: this accessor exists only to scope a printer to its own queue.
+export async function getFulfillmentsForPrinter(ctx: AuthContext) {
+  if (ctx.role !== "PRINTER") {
+    throw new Error(
+      `getFulfillmentsForPrinter is PRINTER-only; got role ${ctx.role}.`
+    );
+  }
+  if (!ctx.printerId) {
+    throw new Error(
+      "Refusing to scope fulfillments: PRINTER context has no printerId."
+    );
+  }
+  return prisma.fulfillment.findMany({
+    where: { printerId: ctx.printerId },
+    orderBy: { createdAt: "asc" },
+    include: FULFILLMENT_INCLUDE,
+  });
+}

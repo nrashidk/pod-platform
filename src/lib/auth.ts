@@ -21,17 +21,41 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 // it, like the auth seed — runs under the plain-Node smoke loader too.
 import { prisma } from "./prisma";
 
-// The origins the dev server is reachable under. localhost and 127.0.0.1 are
-// distinct hosts to the browser's same-origin check, so both must be trusted.
-// In a Codespace the forwarded origin is https://<name>-<port>.<domain>.
-function devTrustedOrigins(): string[] {
-  const origins = ["http://localhost:3000", "http://127.0.0.1:3000"];
+// Origins Better Auth will accept on sign-in POSTs (its CSRF defence). Better
+// Auth ALWAYS trusts the configured baseURL implicitly (getTrustedOrigins pushes
+// new URL(baseURL).origin), so this list only ADDS to that — production needs
+// nothing here to keep working, and we deliberately add nothing.
+//
+// DEV ONLY: the Next dev server hops between :3000 and :3001, and the browser
+// may reach it via localhost OR 127.0.0.1 (distinct hosts to the same-origin
+// check) OR the Codespaces forward — so a single fixed port/host breaks sign-in.
+// We loosen to accept any port on the loopback hosts (and any forwarded port in
+// a Codespace) using Better Auth's wildcard origin matcher, where "*" matches
+// any run of non-"/" chars while the scheme and host stay literal/anchored.
+// That means "http://localhost:*" matches localhost on any port but NOT
+// localhost.evil.com, and the Codespaces pattern matches only the configured
+// codespace's subdomains. None of this applies in production (see the gate).
+function resolveTrustedOrigins(): string[] {
+  // Gate: anything below is dev-only. `next dev` runs with NODE_ENV !==
+  // "production"; Vercel/`next start` set it to "production", so production
+  // stays strict (baseURL-only, trusted implicitly by Better Auth).
+  if (process.env.NODE_ENV === "production") return [];
 
+  const origins = [
+    // Loopback on ANY port — covers :3000/:3001 hops and both host spellings.
+    "http://localhost:*",
+    "http://127.0.0.1:*",
+  ];
+
+  // Codespaces forwards each port to its own subdomain
+  // (https://<name>-<port>.<domain>); wildcard the port segment so a port hop
+  // doesn't need a config change. The literal <name>- prefix and <domain>
+  // suffix keep this scoped to THIS codespace's forwards.
   const { CODESPACE_NAME, GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN } =
     process.env;
   if (CODESPACE_NAME && GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN) {
     origins.push(
-      `https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`,
+      `https://${CODESPACE_NAME}-*.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`,
     );
   }
 
@@ -53,14 +77,12 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
 
   // Better Auth rejects any sign-in POST whose Origin header isn't trusted
-  // (CSRF defence) with a 403. baseURL is trusted implicitly, but the dev
-  // server is reachable under several origins that must each be listed or
-  // sign-in fails with a misleading "Invalid origin" 403:
-  //  - http://localhost:3000     (BETTER_AUTH_URL)
-  //  - http://127.0.0.1:3000     (same server, different host — NOT covered
-  //                               by localhost; this was the reported failure)
-  //  - the Codespaces forwarded HTTPS origin, when running in a Codespace.
-  trustedOrigins: devTrustedOrigins(),
+  // (CSRF defence) with a 403. baseURL is always trusted implicitly; in DEV we
+  // additionally accept the loopback hosts on any port and the Codespaces
+  // forward so port/host variation doesn't cause a misleading "Invalid origin"
+  // 403. In production this returns [] — strict, baseURL-only. See
+  // resolveTrustedOrigins for the gate and the wildcard-safety reasoning.
+  trustedOrigins: resolveTrustedOrigins(),
 
   emailAndPassword: {
     enabled: true,

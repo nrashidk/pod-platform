@@ -70,6 +70,32 @@ export function nextFulfillmentStatus(
   return (ALLOWED_NEXT[status] ?? [])[0] ?? null;
 }
 
+/**
+ * The SUBSET of lifecycle targets a PRINTER is permitted to set. A printer drives
+ * its own work into production and out the door, but DELIVERED (proof-of-delivery,
+ * starts the claim window) and CLOSED (claim window settled) are operator/courier
+ * territory — a printer must never set them. Enforced in BOTH the printer action
+ * layer and the UI; this is the single source of truth for the subset.
+ */
+export const PRINTER_ADVANCE_TARGETS: readonly FulfillmentStatus[] = [
+  "IN_PRODUCTION",
+  "SHIPPED",
+];
+
+/**
+ * The next status a PRINTER may advance `status` to, or null when the next
+ * lifecycle step is outside the printer-permitted subset (or there is none).
+ * The printer UI renders/hides its advance control from THIS — so a SHIPPED
+ * fulfillment shows "nothing further for you" rather than an Advance-to-DELIVERED
+ * button it isn't allowed to press.
+ */
+export function nextPrinterStatus(
+  status: FulfillmentStatus
+): FulfillmentStatus | null {
+  const next = nextFulfillmentStatus(status);
+  return next && PRINTER_ADVANCE_TARGETS.includes(next) ? next : null;
+}
+
 export class InvalidTransitionError extends Error {
   readonly from: FulfillmentStatus;
   readonly to: FulfillmentStatus;
@@ -78,6 +104,27 @@ export class InvalidTransitionError extends Error {
     this.name = "InvalidTransitionError";
     this.from = from;
     this.to = to;
+  }
+}
+
+/**
+ * Raised when an advance is attempted against a Fulfillment that the caller does
+ * not own. The check is done INSIDE the advance transaction (see
+ * advanceFulfillment's ownerPrinterId guard), comparing the persisted row's
+ * printerId to the session-derived id — so a printer forging another printer's
+ * fulfillmentId is rejected before any mutation, with no check-then-act race.
+ */
+export class FulfillmentOwnershipError extends Error {
+  readonly fulfillmentId: string;
+  readonly ownerPrinterId: string;
+  constructor(fulfillmentId: string, ownerPrinterId: string) {
+    super(
+      `Fulfillment ${fulfillmentId} is not owned by printer ${ownerPrinterId}; ` +
+        `refusing to advance.`
+    );
+    this.name = "FulfillmentOwnershipError";
+    this.fulfillmentId = fulfillmentId;
+    this.ownerPrinterId = ownerPrinterId;
   }
 }
 
@@ -154,6 +201,18 @@ export interface AdvanceOptions {
    * Defaults to now; injectable so tests can assert exact window math.
    */
   deliveredAt?: Date;
+
+  /**
+   * OWNERSHIP guard. When set, the advance verifies — inside the SAME
+   * transaction that would mutate the row, before any write — that the
+   * Fulfillment's persisted printerId equals this id, throwing
+   * FulfillmentOwnershipError otherwise. The id MUST come from the caller's
+   * session (AuthContext.printerId), never from client input. This closes the
+   * check-then-act race: a printer cannot advance another printer's fulfillment
+   * even by forging the fulfillmentId. Operator callers omit it (no ownership
+   * constraint) and behave exactly as before.
+   */
+  ownerPrinterId?: string;
 }
 
 /**
@@ -179,6 +238,18 @@ export async function advanceFulfillment(
       where: { id: fulfillmentId },
       include: { shipments: true },
     });
+
+    // (0) Ownership gate — runs FIRST, inside this transaction, before any
+    // mutation. When ownerPrinterId is supplied (printer-initiated advance) the
+    // persisted printerId must match the session-derived id. A forged
+    // fulfillmentId pointing at another printer's row is rejected here, with no
+    // window between the check and the write.
+    if (
+      opts.ownerPrinterId &&
+      fulfillment.printerId !== opts.ownerPrinterId
+    ) {
+      throw new FulfillmentOwnershipError(fulfillmentId, opts.ownerPrinterId);
+    }
 
     const from = fulfillment.status;
 
