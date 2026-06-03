@@ -58,6 +58,20 @@ export default async function OpsPage({
               {t("title", locale)}
             </h1>
             <p className="mt-1 text-sm text-gray-600">{t("subtitle", locale)}</p>
+            <nav className="mt-2 flex items-center gap-4 text-sm font-medium">
+              <Link
+                href={`/ops/new-order?lang=${locale}`}
+                className="text-gray-900 underline-offset-2 hover:underline"
+              >
+                {t("newOrder", locale)}
+              </Link>
+              <Link
+                href={`/ops/billing?lang=${locale}`}
+                className="text-gray-900 underline-offset-2 hover:underline"
+              >
+                {t("billing", locale)}
+              </Link>
+            </nav>
           </div>
           <div className="flex items-center gap-3">
             <LangToggle locale={locale} />

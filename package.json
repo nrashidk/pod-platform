@@ -21,7 +21,8 @@
     "test:fulfillment-lifecycle": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/fulfillment-lifecycle-smoke.ts",
     "test:print-validation": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/print-validation-smoke.ts",
     "test:printer": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/printer-advance-smoke.ts",
-    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:printer"
+    "test:billing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/billing-reconcile-smoke.ts",
+    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:printer && npm run test:billing"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",

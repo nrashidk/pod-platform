@@ -23,6 +23,8 @@ const UI = {
   langEN: { en: "English", ar: "English" },
   langAR: { en: "العربية", ar: "العربية" },
   logout: { en: "Sign out", ar: "تسجيل الخروج" },
+  newOrder: { en: "New order", ar: "طلب جديد" },
+  billing: { en: "Billing ledger", ar: "دفتر الفوترة" },
   noOrders: {
     en: "No orders yet. Run the demo seed (see README/instructions).",
     ar: "لا توجد طلبات بعد. شغّل بيانات العرض التجريبي.",
