@@ -52,10 +52,14 @@ and gateway must be confirmed before any checkout flow ships.
 
 ## Build & Deployment
 
-### 6. `npm run build` fails at type-check on `prisma/*-smoke.ts`
-`npm run build` currently fails at the type-check step on `prisma/*-smoke.ts`
-because those `.ts`-extension test scripts are pulled into tsconfig's build
-scope. Vercel runs `npm run build`, so deploy will fail until this is resolved.
+### 6. `npm run build` fails at type-check on `prisma/*-smoke.ts` — RESOLVED
+`npm run build` previously failed at the type-check step on `prisma/*-smoke.ts`
+because those `.ts`-extension test scripts were pulled into tsconfig's build
+scope. Vercel runs `npm run build`, so deploy would have failed until resolved.
 
-- [ ] Fix before deploying — e.g. exclude `prisma/*-smoke.ts` from tsconfig, or
-      move the smoke tests out of the build path.
+- [x] Fixed — `prisma/**/*.ts` is now excluded in `tsconfig.json`, so the
+      loader-run test/seed scripts no longer enter the production type-check
+      pass. The scripts still run via the `npm run test:*` Node loader (the
+      `--experimental-loader` runtime ignores tsconfig include/exclude), so
+      `npm run test:smoke` is unaffected. Verified: `npm run build` succeeds and
+      `npm run test:smoke` passes.
