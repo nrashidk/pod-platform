@@ -49,3 +49,13 @@ and gateway must be confirmed before any checkout flow ships.
 - [ ] Confirm the UAE business license / entity.
 - [ ] Confirm the payment gateway.
 - [ ] Only then build and enable the checkout/payment phase.
+
+## Build & Deployment
+
+### 6. `npm run build` fails at type-check on `prisma/*-smoke.ts`
+`npm run build` currently fails at the type-check step on `prisma/*-smoke.ts`
+because those `.ts`-extension test scripts are pulled into tsconfig's build
+scope. Vercel runs `npm run build`, so deploy will fail until this is resolved.
+
+- [ ] Fix before deploying — e.g. exclude `prisma/*-smoke.ts` from tsconfig, or
+      move the smoke tests out of the build path.

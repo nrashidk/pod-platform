@@ -3,8 +3,7 @@
 // Minimal bilingual (EN/AR + RTL) back-office login. Two states:
 //  - no session  → email/password form (Better Auth signIn.email)
 //  - session     → "signed in as …" card with role + sign-out, and a link to
-//                  /ops for operators (merchant/printer dashboards are a later
-//                  phase, so there is nowhere else to send them yet)
+//                  each role's surface (/ops, /merchant, /printer)
 // Authorization is NOT decided here — this is UX. The /ops gate is what actually
 // protects the operator surface.
 
@@ -45,6 +44,7 @@ const L = {
   signedInAs: { en: "Signed in as", ar: "مسجَّل الدخول باسم" },
   roleLabel: { en: "Role", ar: "الدور" },
   goToOps: { en: "Go to operations", ar: "الذهاب إلى العمليات" },
+  goToMerchant: { en: "Go to my orders", ar: "الذهاب إلى طلباتي" },
   goToPrinter: { en: "Go to my fulfillments", ar: "الذهاب إلى عمليات التنفيذ الخاصة بي" },
   logout: { en: "Sign out", ar: "تسجيل الخروج" },
   noView: {
@@ -102,12 +102,15 @@ export function LoginClient({
       }
       return;
     }
-    // Route each role to its own surface: operators to the ops console, printers
-    // to their fulfillment queue. Merchants have no dashboard yet, so they land
-    // on the signed-in card.
+    // Route each role to its own surface: operators to the ops console,
+    // merchants to their read-only order tracker, printers to their fulfillment
+    // queue.
     const role = (res.data?.user as { role?: string } | undefined)?.role;
     if (role === "OPERATOR") {
       router.push("/ops");
+      router.refresh();
+    } else if (role === "MERCHANT") {
+      router.push("/merchant");
       router.refresh();
     } else if (role === "PRINTER") {
       router.push("/printer");
@@ -160,6 +163,13 @@ export function LoginClient({
                   className="block rounded-md bg-gray-900 px-4 py-2 text-center text-sm font-medium text-white hover:bg-gray-700"
                 >
                   {tr(L.goToOps)}
+                </Link>
+              ) : user.role === "MERCHANT" ? (
+                <Link
+                  href="/merchant"
+                  className="block rounded-md bg-gray-900 px-4 py-2 text-center text-sm font-medium text-white hover:bg-gray-700"
+                >
+                  {tr(L.goToMerchant)}
                 </Link>
               ) : user.role === "PRINTER" ? (
                 <Link

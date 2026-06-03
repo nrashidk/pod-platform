@@ -57,11 +57,20 @@ async function main() {
     });
   const oA = await mkOrder(mA.id, "Order-A");
   const oB = await mkOrder(mB.id, "Order-B");
+  // A SECOND order for merchant B, so the merchant-scoping negative case proves
+  // isolation against more than one foreign order (a merchant view that leaked
+  // would surface BOTH of B's here). Drives the merchant read-only view's
+  // scoping guarantee — the merchant page reuses this same getOrdersForCaller
+  // MERCHANT branch.
+  const oB2 = await mkOrder(mB.id, "Order-B2");
   await prisma.fulfillment.create({
     data: { orderId: oA.id, printerId: pA.id, wholesale_cost: 50 },
   });
   await prisma.fulfillment.create({
     data: { orderId: oB.id, printerId: pB.id, wholesale_cost: 50 },
+  });
+  await prisma.fulfillment.create({
+    data: { orderId: oB2.id, printerId: pB.id, wholesale_cost: 50 },
   });
 
   const ids = (rows: { id: string }[]) => new Set(rows.map((r) => r.id));
@@ -74,7 +83,7 @@ async function main() {
   );
   assert(op.has(oA.id) && op.has(oB.id), "operator sees both orders");
 
-  console.log("MERCHANT scoped to own merchant:");
+  console.log("MERCHANT scoped to own merchant (drives the /merchant view):");
   const ma = ids(
     await getOrdersForCaller({
       userId: "x", email: "ma", role: "MERCHANT", merchantId: mA.id, printerId: null,
@@ -82,6 +91,14 @@ async function main() {
   );
   assert(ma.has(oA.id), "merchant A sees its own order (positive)");
   assert(!ma.has(oB.id), "merchant A does NOT see merchant B's order (negative)");
+  assert(
+    !ma.has(oB2.id),
+    "merchant A does NOT see merchant B's SECOND order (negative, multi-order)"
+  );
+  assert(
+    ma.has(oA.id) && [...ma].every((id) => id !== oB.id && id !== oB2.id),
+    "merchant A's result set contains its own order and NONE of merchant B's"
+  );
 
   console.log("PRINTER scoped to assigned fulfillments:");
   const pb = ids(
