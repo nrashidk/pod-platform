@@ -50,11 +50,8 @@ const UI = {
   phaseMinting: { en: "Authorizing upload…", ar: "جارٍ تفويض الرفع…" },
   phaseUploading: { en: "Uploading to storage…", ar: "جارٍ الرفع إلى التخزين…" },
   phaseValidating: { en: "Validating file…", ar: "جارٍ التحقق من الملف…" },
-  fileHint: {
-    en: "PNG or JPEG.",
-    ar: "PNG أو JPEG.",
-  },
-  maxSize: { en: "Max", ar: "الحد الأقصى" },
+  // Up-front "what to upload" requirements (shown before any file is chosen).
+  reqLabel: { en: "What to upload", ar: "ما الذي ترفعه" },
   viewFile: { en: "View current file", ar: "عرض الملف الحالي" },
   uploadedPassed: {
     en: "Print file passed validation.",
@@ -177,6 +174,101 @@ export function uploadPhaseErrorKey(
     default:
       return "errGeneric";
   }
+}
+
+// ── Up-front upload requirements, derived from the PrintArea spec ──
+// Stated BEFORE a file is chosen so the merchant knows the target and the first
+// attempt can succeed. Numbers come from the spec (designs.ts), never hardcoded.
+export function placementRequirements(
+  locale: Locale,
+  opts: { formats: string[]; minWidthPx: number; minHeightPx: number; maxFileMb: number }
+): string {
+  const fmts = opts.formats.join(" / ");
+  return locale === "ar"
+    ? `ارفع ملف ${fmts} لا تقل أبعاده عن ${opts.minWidthPx} × ${opts.minHeightPx} بكسل وبحجم حتى ${opts.maxFileMb} ميجابايت. تضمن هذه الأبعاد طباعة واضحة بالحجم الكامل.`
+    : `Upload a ${fmts} file at least ${opts.minWidthPx} × ${opts.minHeightPx} pixels and up to ${opts.maxFileMb} MB. That size keeps the print sharp at full product size.`;
+}
+
+// ── Friendly, non-technical translation of validation reason strings ──
+// validatePrintFile returns precise, technical reasons (kept verbatim for
+// tests/ops and persisted on the row). Merchants aren't printers, so at THIS
+// display layer we recognize each reason, pull out its numbers, and re-state it
+// as: what's wrong, what's needed, and what to DO — bilingual EN/AR. The exact
+// figures are preserved (a merchant can hand them straight to a designer). An
+// unrecognized reason falls through verbatim so nothing is ever hidden.
+const placementWord = (code: string, locale: Locale): string => {
+  const bi = (PLACEMENTS as Record<string, Bi>)[code];
+  return bi ? pick(bi, locale) : code.toLowerCase().replace(/_/g, " ");
+};
+
+export function friendlyReason(reason: string, locale: Locale): string {
+  let m: RegExpMatchArray | null;
+
+  // Not enough pixels to fill the print area (the most common flag).
+  if (
+    (m = reason.match(
+      /^dimensions (\d+)×(\d+)px too small for (\w+) print area \(needs ≥(\d+)×(\d+)px at (\d+) DPI\)$/
+    ))
+  ) {
+    const [, w, h, place, reqW, reqH] = m;
+    const p = placementWord(place, locale);
+    return locale === "ar"
+      ? `هذه الصورة أصغر من أن تُطبع بوضوح بالحجم الكامل. تحتاج طباعة «${p}» إلى صورة لا تقل عن ${reqW} × ${reqH} بكسل — أما صورتك فهي ${w} × ${h}. اطلب من مصمّمك ملفًا بدقة الطباعة، أو أعد تصدير التصميم بأبعاد أكبر.`
+      : `This image is too small to print sharply at full product size. A ${p} print needs an image of at least ${reqW} × ${reqH} pixels — yours is ${w} × ${h}. Ask your designer for a print-resolution file, or re-export your design at a larger size.`;
+  }
+
+  // Embedded print resolution (DPI) too low.
+  if ((m = reason.match(/^DPI (\d+) below minimum (\d+)$/))) {
+    const [, got, min] = m;
+    return locale === "ar"
+      ? `دقة الطباعة المحفوظة داخل الملف منخفضة جدًا (${got} نقطة/بوصة، والمطلوب ${min} على الأقل). أعد تصدير الملف بدقة ${min} نقطة/بوصة أو أعلى — يتحكم بذلك إعداد «التصدير» أو «الحفظ للطباعة» في برنامج التصميم.`
+      : `This file's saved print resolution is too low (${got} DPI; it needs at least ${min} DPI). Re-export it at ${min} DPI or higher — your design software's "export" or "save for print" setting controls this.`;
+  }
+
+  // Transparency required (e.g. DTG on dark garments) but the file is opaque.
+  if (
+    (m = reason.match(
+      /^(\w+) requires transparency \(alpha channel\) but file is opaque$/
+    ))
+  ) {
+    return locale === "ar"
+      ? `تحتاج هذه الطباعة إلى خلفية شفافة كي يُطبع تصميمك وحده دون مستطيل حوله. أعد تصدير الملف بصيغة PNG بخلفية شفافة (أوقف طبقة الخلفية أو لون التعبئة قبل التصدير).`
+      : `This print needs a transparent background so only your design prints — not a rectangle around it. Re-export as a PNG with a transparent background (turn off the background layer or fill before exporting).`;
+  }
+
+  // Wrong file type for this placement.
+  if ((m = reason.match(/^format (\w+) not allowed \(allowed: (.+)\)$/))) {
+    const [, got, allowed] = m;
+    return locale === "ar"
+      ? `لا يمكن استخدام نوع الملف هذا (${got}) لهذه الطباعة. يُرجى رفع أحد الأنواع التالية: ${allowed}. يمكنك إعادة التصدير أو «الحفظ بصيغة» بأحد هذه الأنواع من برنامج التصميم.`
+      : `This file type (${got}) can't be used for this print. Please upload one of: ${allowed}. You can re-export or "save as" one of these formats from your design software.`;
+  }
+
+  // File over the per-placement size limit.
+  if ((m = reason.match(/^file ([\d.]+)MB exceeds maximum ([\d.]+)MB$/))) {
+    const [, got, max] = m;
+    return locale === "ar"
+      ? `حجم هذا الملف يتجاوز الحد الأقصى ${max} ميجابايت (حجمه ${got} ميجابايت). صدّره كملف PNG أو JPEG مسطّح، أو قلّل أبعاده بالبكسل قليلًا — يمكن أن يبقى أكبر بكثير من الحد الأدنى ومع ذلك ضمن الحد المسموح.`
+      : `This file is over the ${max} MB limit (it's ${got} MB). Export it as a flattened PNG or JPEG, or reduce its pixel size a little — it can stay well above the minimum and still fit.`;
+  }
+
+  // Color mode mismatch (e.g. CMYK vs sRGB).
+  if ((m = reason.match(/^color profile (.+) does not match required (.+)$/))) {
+    const [, got, want] = m;
+    return locale === "ar"
+      ? `يستخدم هذا الملف نمط ألوان غير مناسب (${got})، بينما تتطلب هذه الطباعة ${want}. حوّل المستند إلى ${want} في برنامج التصميم قبل التصدير لتتطابق الألوان المطبوعة مع ما تراه.`
+      : `This file uses the wrong color mode (${got}); this print needs ${want}. Convert the document to ${want} in your design software before exporting, so the printed colors match what you see.`;
+  }
+
+  // Bytes weren't a readable image at all.
+  if (reason === "file is not a readable image (could not parse metadata)") {
+    return locale === "ar"
+      ? `تعذّر علينا قراءة هذا الملف كصورة. تأكد من رفع ملف الصورة نفسه (PNG أو JPEG)، وليس ملف PDF أو ZIP أو ملف مشروع من برنامج التصميم.`
+      : `We couldn't read this file as an image. Make sure you're uploading the actual image file (PNG or JPEG) — not a PDF, a ZIP, or a design-software project file.`;
+  }
+
+  // Unknown reason — surface it as-is rather than hide it.
+  return reason;
 }
 
 // Map a create-design-action error kind to a label key.

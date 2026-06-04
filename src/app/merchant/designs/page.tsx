@@ -12,7 +12,13 @@ import { listMyDesigns, listDesignableProductTypes } from "@/lib/designs";
 import { LogoutButton } from "@/components/logout-button";
 import { CreateDesignForm } from "./CreateDesignForm";
 import { UploadPlacementForm } from "./UploadPlacementForm";
-import { dt, placementLabel, statusLabel } from "./labels";
+import {
+  dt,
+  placementLabel,
+  statusLabel,
+  placementRequirements,
+  friendlyReason,
+} from "./labels";
 
 // Designs + validation statuses change as files are uploaded; always fresh.
 export const dynamic = "force-dynamic";
@@ -102,12 +108,22 @@ export default async function MerchantDesignsPage({
                           <StatusBadge status={p.status} locale={locale} />
                         </div>
 
-                        <div className="mt-1 text-xs text-gray-400">
-                          {p.allowed_formats.join(", ")} · {dt("maxSize", locale)} {p.max_file_mb}
-                          MB
+                        {/* Up-front requirements, stated BEFORE a file is chosen
+                            and derived from the PrintArea spec — so the merchant
+                            knows the target and the first upload can succeed. */}
+                        <div className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                          <span className="font-medium text-gray-700">
+                            {dt("reqLabel", locale)}:{" "}
+                          </span>
+                          {placementRequirements(locale, {
+                            formats: p.allowed_formats,
+                            minWidthPx: p.min_width_px,
+                            minHeightPx: p.min_height_px,
+                            maxFileMb: p.max_file_mb,
+                          })}
                           {p.print_file_url && (
                             <>
-                              {" · "}
+                              {" "}
                               {/* Private store: link to the ownership-gated route,
                                   which mints a short-lived signed URL on click.
                                   Never the raw blob URL (it 403s + would leak IP). */}
@@ -125,13 +141,15 @@ export default async function MerchantDesignsPage({
                           )}
                         </div>
 
-                        {/* FLAGGED reasons persisted on the row. */}
+                        {/* FLAGGED reasons persisted on the row — re-stated in
+                            plain, non-technical language at this display layer
+                            (the persisted strings stay technical for ops/tests). */}
                         {p.status === "FLAGGED" && p.notes && (
                           <div className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
                             <p className="font-medium">{dt("reasonsHeading", locale)}</p>
-                            <ul className="mt-1 list-disc ps-4">
+                            <ul className="mt-1 list-disc space-y-1 ps-4">
                               {p.notes.split("; ").map((r, i) => (
-                                <li key={i}>{r}</li>
+                                <li key={i}>{friendlyReason(r, locale)}</li>
                               ))}
                             </ul>
                           </div>

@@ -16,7 +16,13 @@ import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import type { Locale } from "@/lib/i18n";
 import { finalizePlacementAction, type UploadState, type UploadPhase } from "./actions";
-import { dt, uploadErrorKey, uploadPhaseKey, uploadPhaseErrorKey } from "./labels";
+import {
+  dt,
+  uploadErrorKey,
+  uploadPhaseKey,
+  uploadPhaseErrorKey,
+  friendlyReason,
+} from "./labels";
 
 const ACCEPTED = ["image/png", "image/jpeg"];
 // Reject codes the token route can throw; map them to the same localized labels.
@@ -157,9 +163,9 @@ export function UploadPlacementForm({
         <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <p className="font-medium">{dt("uploadedFlagged", locale)}</p>
           {state.reasons && state.reasons.length > 0 && (
-            <ul className="mt-1 list-disc ps-4">
+            <ul className="mt-1 list-disc space-y-1 ps-4">
               {state.reasons.map((r, i) => (
-                <li key={i}>{r}</li>
+                <li key={i}>{friendlyReason(r, locale)}</li>
               ))}
             </ul>
           )}
@@ -187,7 +193,6 @@ export function UploadPlacementForm({
               : dt("uploadFile", locale)}
         </button>
       </div>
-      <p className="text-xs text-gray-400">{dt("fileHint", locale)}</p>
     </form>
   );
 }

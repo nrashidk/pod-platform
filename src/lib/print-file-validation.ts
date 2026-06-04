@@ -63,8 +63,10 @@ function normalizeFormat(format: string | undefined): string | null {
   return upper === "JPG" ? "JPEG" : upper;
 }
 
-// Pixels needed to fill `mm` at `dpi`.
-function requiredPixels(mm: number, dpi: number): number {
+// Pixels needed to fill `mm` at `dpi`. Exported so the merchant read model can
+// show the SAME minimum-dimensions target up front that this validator enforces
+// — one formula, no drift between "what you need" and "what we check".
+export function requiredPixels(mm: number, dpi: number): number {
   return Math.ceil((mm / MM_PER_INCH) * dpi);
 }
 

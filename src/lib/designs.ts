@@ -18,6 +18,7 @@ import { prisma } from "./prisma";
 import {
   validatePrintFile,
   toDesignPlacementValidation,
+  requiredPixels,
   type PrintAreaSpec,
 } from "./print-file-validation";
 import type { PrintFileStore, PrintFilePut } from "./print-file-store";
@@ -366,6 +367,11 @@ export interface PlacementView {
   print_file_url: string | null;
   max_file_mb: number;
   allowed_formats: string[];
+  /** Minimum pixel dimensions to fill this print area at min_dpi — the SAME
+   * target validatePrintFile enforces, surfaced so the UI can state it up front
+   * (so the merchant's first upload can succeed). Derived, never stored. */
+  min_width_px: number;
+  min_height_px: number;
 }
 
 export interface DesignView {
@@ -398,6 +404,10 @@ export async function listMyDesigns(merchantId: string): Promise<DesignView[]> {
               placement: true,
               max_file_mb: true,
               allowed_formats: true,
+              // For the up-front "what to upload" minimum-size target.
+              width_mm: true,
+              height_mm: true,
+              min_dpi: true,
             },
           },
         },
@@ -424,6 +434,8 @@ export async function listMyDesigns(merchantId: string): Promise<DesignView[]> {
         print_file_url: existing?.print_file_url ?? null,
         max_file_mb: area.max_file_mb,
         allowed_formats: area.allowed_formats,
+        min_width_px: requiredPixels(area.width_mm, area.min_dpi),
+        min_height_px: requiredPixels(area.height_mm, area.min_dpi),
       };
     });
     return {
