@@ -13,6 +13,7 @@ import {
   FirstArticleRequiredError,
   InvalidTransitionError,
 } from "@/lib/fulfillment";
+import { recordDispatchHold } from "@/lib/printer-hold";
 import { requireRole } from "@/lib/auth-context";
 import { isLocale, type Locale } from "@/lib/i18n";
 
@@ -35,6 +36,13 @@ export async function advanceAction(formData: FormData) {
 
   try {
     await advanceFulfillment(fulfillmentId, toStatus);
+    // SHIPPED hook — layered on top of the lifecycle engine (not inside it),
+    // exactly as recordOrderBilling is called beside createOrderWithRouting. On
+    // a BULK fulfillment this splits the printer ledger 70/30; sub-threshold is
+    // a no-op. Record-only — no money moves.
+    if (toStatus === "SHIPPED") {
+      await recordDispatchHold(fulfillmentId);
+    }
   } catch (e) {
     // The page renders the bulk first-article BLOCK proactively (disabled
     // control), so the gate is normally never hit here. This catch is the

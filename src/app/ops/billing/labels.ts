@@ -53,6 +53,44 @@ const UI = {
     en: "Aggregate does NOT reconcile — investigate.",
     ar: "الإجمالي غير متوازن — يجب التحقق.",
   },
+
+  // ── 70/30 retention hold ──
+  payableNow: { en: "Payable now", ar: "مستحق الآن" },
+  held: { en: "Held (30%)", ar: "محتجز (٣٠٪)" },
+  holdDetail: {
+    en: "Bulk retention holds (70/30)",
+    ar: "احتجازات الطلبات الكبيرة (٧٠/٣٠)",
+  },
+  holdSubtitle: {
+    en: "Release is computed live: a delivered fulfillment past its claim window with no open claim shows as payable — no job runs.",
+    ar: "يُحسب الإفراج فورياً: يظهر الطلب المُسلَّم بعد انتهاء نافذة المطالبات وبدون مطالبة مفتوحة كمستحق للدفع — دون تشغيل أي مهمة.",
+  },
+  noHolds: {
+    en: "No bulk retention holds yet (no dispatched fulfillment ≥ AED 1,000).",
+    ar: "لا توجد احتجازات حتى الآن (لا يوجد طلب مُرسَل بقيمة ≥ ١٠٠٠ درهم).",
+  },
+  fulfillment: { en: "Fulfillment", ar: "التنفيذ" },
+  wholesale: { en: "Wholesale", ar: "سعر الجملة" },
+  dispatch70: { en: "Dispatch (70%)", ar: "عند الإرسال (٧٠٪)" },
+  held30: { en: "Held (30%)", ar: "محتجز (٣٠٪)" },
+  holdState: { en: "Hold state", ar: "حالة الاحتجاز" },
+  stateHeld: { en: "HELD", ar: "محتجز" },
+  stateReleasable: { en: "RELEASABLE", ar: "قابل للإفراج" },
+  windowCloses: { en: "Window closes", ar: "إغلاق النافذة" },
+  notDelivered: { en: "Not delivered", ar: "لم يُسلَّم" },
+  claimStatus: { en: "Claim", ar: "المطالبة" },
+  noClaim: { en: "None", ar: "لا يوجد" },
+  claimOpen: { en: "Open claim", ar: "مطالبة مفتوحة" },
+  openClaimBtn: { en: "Open claim", ar: "فتح مطالبة" },
+  closeClaimBtn: { en: "Close claim", ar: "إغلاق المطالبة" },
+  claimDescPlaceholder: {
+    en: "Defect description…",
+    ar: "وصف العيب…",
+  },
+  claimErr: {
+    en: "Could not open the claim — the claim window is closed or not yet started.",
+    ar: "تعذّر فتح المطالبة — نافذة المطالبات مغلقة أو لم تبدأ بعد.",
+  },
 } as const;
 
 export type BillingKey = keyof typeof UI;

@@ -22,6 +22,7 @@ import {
   InvalidTransitionError,
   PRINTER_ADVANCE_TARGETS,
 } from "@/lib/fulfillment";
+import { recordDispatchHold } from "@/lib/printer-hold";
 import { requireRole } from "@/lib/auth-context";
 import { isLocale, type Locale } from "@/lib/i18n";
 
@@ -62,6 +63,12 @@ export async function advanceAction(formData: FormData) {
     await advanceFulfillment(fulfillmentId, toStatus, {
       ownerPrinterId: ctx.printerId,
     });
+    // SHIPPED hook — same integration point as the operator action. On a BULK
+    // fulfillment this splits the printer ledger 70/30; sub-threshold is a
+    // no-op. Record-only — no money moves. Ownership was already verified above.
+    if (toStatus === "SHIPPED") {
+      await recordDispatchHold(fulfillmentId);
+    }
   } catch (e) {
     // Expected rejections (not-yours, illegal transition, bulk first-article
     // block) surface as a per-fulfillment notice rather than a crash. Unknown

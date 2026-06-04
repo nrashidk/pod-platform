@@ -11,6 +11,8 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { getDirection, isLocale, type Locale } from "@/lib/i18n";
+import { holdStatus, REASON_HELD_30 } from "@/lib/printer-hold";
+import { openDefectClaim, closeDefectClaim } from "../claim-actions";
 import { LogoutButton } from "@/components/logout-button";
 import { t } from "../labels";
 import { bt } from "./labels";
@@ -23,7 +25,7 @@ const money = (n: number, currency = "AED") => `${n.toFixed(2)} ${currency}`;
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lang?: string; created?: string }>;
+  searchParams: Promise<{ lang?: string; created?: string; claimErr?: string }>;
 }) {
   await requireRole("OPERATOR"); // DATA-LAYER gate, independent of middleware.
 
@@ -31,6 +33,9 @@ export default async function BillingPage({
   const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
   const dir = getDirection(locale);
   const justCreated = Boolean(sp.created);
+  const claimError = Boolean(sp.claimErr);
+  // Single "now" for the whole render — lazy hold evaluation reads it.
+  const now = new Date();
 
   // One read of each ledger side + the orders they belong to; aggregate in JS
   // (ops scale). WalletTransaction carries orderId + wallet→merchant; the printer
@@ -45,7 +50,7 @@ export default async function BillingPage({
       },
     }),
     prisma.printerLedgerEntry.findMany({
-      select: { amount: true, printerId: true, fulfillmentId: true },
+      select: { amount: true, printerId: true, fulfillmentId: true, reason: true },
     }),
     prisma.order.findMany({
       where: { fulfillments: { some: {} } },
@@ -70,6 +75,58 @@ export default async function BillingPage({
   ]);
   const merchantName = new Map(merchants.map((m) => [m.id, m.name]));
   const printerName = new Map(printers.map((p) => [p.id, p.name]));
+
+  // ── Fulfillments carrying a 70/30 hold (hold_status flipped off NONE at the
+  // bulk SHIPPED transition). Pull each one's lifecycle status, its Shipment
+  // claim window, and its open-claim count — the exact inputs holdStatus() needs
+  // to compute availability LAZILY (no job has run). ──
+  const heldFulfillments = await prisma.fulfillment.findMany({
+    where: { hold_status: { not: "NONE" } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      orderId: true,
+      printerId: true,
+      status: true,
+      wholesale_cost: true,
+      dispatch_paid: true,
+      held_amount: true,
+      shipments: {
+        select: { claim_window_closes_at: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+      claims: { select: { id: true, status: true } },
+    },
+  });
+
+  // fulfillmentId → computed hold state + the inputs, so both the per-printer
+  // split and the detail section share ONE evaluation per fulfillment.
+  const holdByFulfillment = new Map<
+    string,
+    {
+      state: "HELD" | "RELEASABLE";
+      claimWindowClosesAt: Date | null;
+      openClaim: { id: string } | null;
+    }
+  >();
+  for (const f of heldFulfillments) {
+    const closesAt = f.shipments[0]?.claim_window_closes_at ?? null;
+    const openClaims = f.claims.filter(
+      (c) => c.status === "OPEN" || c.status === "UNDER_REVIEW"
+    );
+    const state = holdStatus({
+      fulfillmentStatus: f.status,
+      claimWindowClosesAt: closesAt,
+      openClaimCount: openClaims.length,
+      now,
+    });
+    holdByFulfillment.set(f.id, {
+      state,
+      claimWindowClosesAt: closesAt,
+      openClaim: openClaims[0] ? { id: openClaims[0].id } : null,
+    });
+  }
   const walletRows = wallets
     .map((w) => ({
       merchant: merchantName.get(w.merchantId) ?? w.merchantId,
@@ -88,18 +145,42 @@ export default async function BillingPage({
     );
   }
 
-  // ── Per printer: total payable (entries are positive = owed to printer). ──
+  // ── Per printer: total payable (entries are positive = owed to printer). The
+  // 70/30 hold PARTITIONS this same total into "payable now" vs "held" — it
+  // never changes the total, so reconciliation stays intact by construction:
+  //   payableNow + held === total payable === Σ entries.
+  // A HELD_30 entry counts as payable-now ONLY if holdStatus() says RELEASABLE
+  // (computed live); every other entry is payable now. ──
   const payableByPrinter = new Map<string, number>();
+  const payableNowByPrinter = new Map<string, number>();
+  const heldByPrinter = new Map<string, number>();
   const paidByFulfillment = new Map<string, number>();
   for (const e of ledgerEntries) {
+    const amt = Number(e.amount);
     payableByPrinter.set(
       e.printerId,
-      round2((payableByPrinter.get(e.printerId) ?? 0) + Number(e.amount))
+      round2((payableByPrinter.get(e.printerId) ?? 0) + amt)
     );
+
+    const isHeldBucket = e.reason.startsWith(REASON_HELD_30);
+    const hold = e.fulfillmentId ? holdByFulfillment.get(e.fulfillmentId) : null;
+    const stillHeld = isHeldBucket && hold?.state === "HELD";
+    if (stillHeld) {
+      heldByPrinter.set(
+        e.printerId,
+        round2((heldByPrinter.get(e.printerId) ?? 0) + amt)
+      );
+    } else {
+      payableNowByPrinter.set(
+        e.printerId,
+        round2((payableNowByPrinter.get(e.printerId) ?? 0) + amt)
+      );
+    }
+
     if (e.fulfillmentId) {
       paidByFulfillment.set(
         e.fulfillmentId,
-        round2((paidByFulfillment.get(e.fulfillmentId) ?? 0) + Number(e.amount))
+        round2((paidByFulfillment.get(e.fulfillmentId) ?? 0) + amt)
       );
     }
   }
@@ -132,6 +213,23 @@ export default async function BillingPage({
       payable,
       margin,
       reconciles: round2(owed - payable) === margin,
+    };
+  });
+
+  // ── Per-fulfillment hold detail (bulk holds only). state is the live
+  // holdStatus() verdict; the claim controls operate the minimal open/close. ──
+  const holdRows = heldFulfillments.map((f) => {
+    const hold = holdByFulfillment.get(f.id)!;
+    return {
+      id: f.id,
+      orderId: f.orderId,
+      printer: printerName.get(f.printerId) ?? f.printerId,
+      wholesale: round2(Number(f.wholesale_cost)),
+      dispatch_paid: f.dispatch_paid != null ? round2(Number(f.dispatch_paid)) : 0,
+      held_amount: f.held_amount != null ? round2(Number(f.held_amount)) : 0,
+      state: hold.state,
+      claimWindowClosesAt: hold.claimWindowClosesAt,
+      openClaimId: hold.openClaim?.id ?? null,
     };
   });
 
@@ -174,6 +272,12 @@ export default async function BillingPage({
         {justCreated && (
           <p className="mb-6 rounded-md bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
             {bt("createdNotice", locale)}
+          </p>
+        )}
+
+        {claimError && (
+          <p className="mb-6 rounded-md bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {bt("claimErr", locale)}
           </p>
         )}
 
@@ -232,16 +336,129 @@ export default async function BillingPage({
               />
             </Section>
 
-            {/* Per printer */}
+            {/* Per printer — total payable split into payable-now vs held. The
+                two columns always sum to the same total payable (invariant). */}
             <Section title={bt("printersPayable", locale)}>
               <Table
-                head={[bt("printer", locale), bt("payable", locale)]}
+                head={[
+                  bt("printer", locale),
+                  bt("payableNow", locale),
+                  bt("held", locale),
+                  bt("payable", locale),
+                ]}
                 rows={[...payableByPrinter.entries()].map(([pid, payable]) => [
                   printerName.get(pid) ?? pid,
+                  money(payableNowByPrinter.get(pid) ?? 0),
+                  money(heldByPrinter.get(pid) ?? 0),
                   money(payable),
                 ])}
               />
             </Section>
+
+            {/* Per-fulfillment 70/30 retention holds + claim controls. */}
+            <section>
+              <h2 className="mb-1 text-sm font-semibold text-gray-900">
+                {bt("holdDetail", locale)}
+              </h2>
+              <p className="mb-3 max-w-2xl text-xs text-gray-500">
+                {bt("holdSubtitle", locale)}
+              </p>
+              <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                {holdRows.length === 0 ? (
+                  <p className="p-6 text-center text-sm text-gray-500">
+                    {bt("noHolds", locale)}
+                  </p>
+                ) : (
+                  <Table
+                    head={[
+                      bt("fulfillment", locale),
+                      bt("printer", locale),
+                      bt("wholesale", locale),
+                      bt("dispatch70", locale),
+                      bt("held30", locale),
+                      bt("holdState", locale),
+                      bt("windowCloses", locale),
+                      bt("claimStatus", locale),
+                    ]}
+                    rows={holdRows.map((h) => [
+                      <span key="id" className="font-mono">
+                        {h.id.slice(-8)}
+                      </span>,
+                      h.printer,
+                      money(h.wholesale),
+                      money(h.dispatch_paid),
+                      money(h.held_amount),
+                      <span
+                        key="st"
+                        className={
+                          h.state === "RELEASABLE"
+                            ? "font-medium text-green-700"
+                            : "font-medium text-amber-700"
+                        }
+                      >
+                        {bt(
+                          h.state === "RELEASABLE"
+                            ? "stateReleasable"
+                            : "stateHeld",
+                          locale
+                        )}
+                      </span>,
+                      h.claimWindowClosesAt ? (
+                        <span key="wc" className="font-mono text-xs">
+                          {h.claimWindowClosesAt.toISOString().slice(0, 10)}
+                        </span>
+                      ) : (
+                        <span key="wc" className="text-xs text-gray-400">
+                          {bt("notDelivered", locale)}
+                        </span>
+                      ),
+                      h.openClaimId ? (
+                        <form key="cl" action={closeDefectClaim}>
+                          <input type="hidden" name="claimId" value={h.openClaimId} />
+                          <input type="hidden" name="lang" value={locale} />
+                          <span className="me-2 text-xs font-medium text-red-600">
+                            {bt("claimOpen", locale)}
+                          </span>
+                          <button
+                            type="submit"
+                            className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium hover:bg-gray-100"
+                          >
+                            {bt("closeClaimBtn", locale)}
+                          </button>
+                        </form>
+                      ) : h.claimWindowClosesAt &&
+                        now.getTime() <= h.claimWindowClosesAt.getTime() ? (
+                        <form key="op" action={openDefectClaim} className="flex gap-1">
+                          <input
+                            type="hidden"
+                            name="fulfillmentId"
+                            value={h.id}
+                          />
+                          <input type="hidden" name="lang" value={locale} />
+                          <input
+                            type="text"
+                            name="description"
+                            required
+                            placeholder={bt("claimDescPlaceholder", locale)}
+                            className="w-28 rounded-md border border-gray-300 px-2 py-1 text-xs"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium hover:bg-gray-100"
+                          >
+                            {bt("openClaimBtn", locale)}
+                          </button>
+                        </form>
+                      ) : (
+                        <span key="none" className="text-xs text-gray-400">
+                          {bt("noClaim", locale)}
+                        </span>
+                      ),
+                    ])}
+                  />
+                )}
+              </div>
+            </section>
 
             {/* Per order with reconcile check */}
             <Section title={bt("perOrder", locale)}>
