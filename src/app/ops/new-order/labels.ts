@@ -59,6 +59,10 @@ const UI = {
   },
   errNoMerchant: { en: "Select a merchant.", ar: "اختر تاجرًا." },
   errNoDesign: { en: "Select a design.", ar: "اختر تصميمًا." },
+  errDesignNotOrderable: {
+    en: "That design isn't orderable yet — every placement must be a validated (PASSED) print file.",
+    ar: "هذا التصميم غير قابل للطلب بعد — يجب أن يكون كل موضع ملف طباعة تم التحقق منه (مقبول).",
+  },
   errNoLines: {
     en: "Add at least one complete line (product, variant, method, qty).",
     ar: "أضف بندًا مكتملًا واحدًا على الأقل (منتج، نوع، طريقة، كمية).",
@@ -86,6 +90,8 @@ export function errorKeyFor(kind: string | undefined): NewOrderKey {
       return "errNoMerchant";
     case "no_design":
       return "errNoDesign";
+    case "design_not_orderable":
+      return "errDesignNotOrderable";
     case "no_lines":
       return "errNoLines";
     case "bad_line":

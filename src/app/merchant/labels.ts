@@ -25,6 +25,7 @@ const UI = {
   langEN: { en: "English", ar: "English" },
   langAR: { en: "العربية", ar: "العربية" },
   logout: { en: "Sign out", ar: "تسجيل الخروج" },
+  manageDesigns: { en: "Manage designs", ar: "إدارة التصاميم" },
   noOrders: {
     en: "You don't have any orders yet.",
     ar: "ليست لديك أي طلبات بعد.",

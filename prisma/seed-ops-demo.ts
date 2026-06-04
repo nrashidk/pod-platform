@@ -62,7 +62,7 @@ async function main() {
     },
   });
   const design = await prisma.design.create({
-    data: { merchantId: merchant.id, name: "DEMO Design" },
+    data: { merchantId: merchant.id, name: "DEMO Design", productTypeId: tshirtType.id },
   });
 
   const tshirt = await prisma.product.create({

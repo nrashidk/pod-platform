@@ -58,7 +58,13 @@ export default async function NewOrderPage({
         },
       },
     }),
+    // Only ORDERABLE designs are offered: ≥1 placement (`some: {}`) and every
+    // placement PASSED (`none` that is non-PASSED). Mirrors isDesignOrderable;
+    // the action re-checks at the data layer (defense-in-depth).
     prisma.design.findMany({
+      where: {
+        placements: { some: {}, none: { validation_status: { not: "PASSED" } } },
+      },
       orderBy: { name: "asc" },
       select: { id: true, name: true, merchantId: true },
     }),

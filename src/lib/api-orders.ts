@@ -23,6 +23,7 @@ import {
   type CreateOrderLineInput,
 } from "./orders";
 import { recordOrderBilling } from "./billing";
+import { getDesignOrderability } from "./designs";
 
 // ── Stable, machine-readable error codes. These are part of the API contract —
 // do not rename without versioning. Each maps to a fixed HTTP status.
@@ -242,13 +243,10 @@ export async function apiCreateOrder(
   });
   const bySku = new Map(variants.map((v) => [v.sku, v]));
 
-  // design_ref ownership: each distinct ref must be a Design owned by THIS merchant.
+  // design_ref: each distinct ref must be a Design owned by THIS merchant AND
+  // fully validated (orderability rule — every placement PASSED, ≥1 placement).
   const designRefs = [...new Set(parsed.map((l) => l.designRef))];
-  const designs = await prisma.design.findMany({
-    where: { id: { in: designRefs }, merchantId },
-    select: { id: true },
-  });
-  const ownedDesigns = new Set(designs.map((d) => d.id));
+  const designOrderability = await getDesignOrderability(merchantId, designRefs);
 
   const lines: CreateOrderLineInput[] = [];
   for (const l of parsed) {
@@ -269,11 +267,20 @@ export async function apiCreateOrder(
         { sku: l.sku, method: l.method }
       );
     }
-    if (!ownedDesigns.has(l.designRef)) {
+    const dz = designOrderability.get(l.designRef);
+    if (!dz || !dz.owned) {
       return err(
         422,
         "invalid_design",
         `design_ref '${l.designRef}' does not exist or does not belong to this merchant.`,
+        { design_ref: l.designRef }
+      );
+    }
+    if (!dz.orderable) {
+      return err(
+        422,
+        "invalid_design",
+        `design_ref '${l.designRef}' is not orderable — every placement must be validated PASSED before it can be ordered.`,
         { design_ref: l.designRef }
       );
     }

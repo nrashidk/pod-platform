@@ -18,6 +18,7 @@ import {
   type CreateOrderLineInput,
 } from "@/lib/orders";
 import { recordOrderBilling } from "@/lib/billing";
+import { isDesignOrderable } from "@/lib/designs";
 
 export interface NewOrderState {
   errorKind?: string;
@@ -69,7 +70,10 @@ export async function createOrderAction(
   const [design, products] = await Promise.all([
     prisma.design.findUnique({
       where: { id: designId },
-      select: { merchantId: true },
+      select: {
+        merchantId: true,
+        placements: { select: { validation_status: true } },
+      },
     }),
     prisma.product.findMany({
       where: { id: { in: [...new Set(complete.map((l) => l.productId!))] } },
@@ -86,6 +90,12 @@ export async function createOrderAction(
 
   if (!design || design.merchantId !== merchantId) {
     return { errorKind: "no_design" };
+  }
+  // Orderability rule (data layer): a design is orderable only when it has ≥1
+  // placement and every placement is PASSED. A FLAGGED/incomplete design must
+  // not be orderable — even though the page only OFFERS orderable designs.
+  if (!isDesignOrderable(design.placements)) {
+    return { errorKind: "design_not_orderable" };
   }
 
   const byProduct = new Map(products.map((p) => [p.id, p]));

@@ -33,16 +33,16 @@ async function main() {
     },
   });
 
-  const design = await prisma.design.create({
-    data: { merchantId: merchant.id, name: "TEST Design" },
-  });
-
   // Find the seeded TEST product types, then make a catalog Product+variant each.
   const tshirtType = await prisma.productType.findUniqueOrThrow({
     where: { slug: "test-tshirt" },
   });
   const mugType = await prisma.productType.findUniqueOrThrow({
     where: { slug: "test-mug" },
+  });
+
+  const design = await prisma.design.create({
+    data: { merchantId: merchant.id, name: "TEST Design", productTypeId: tshirtType.id },
   });
 
   const tshirt = await prisma.product.create({

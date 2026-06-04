@@ -60,14 +60,14 @@ async function main() {
       email: "merchant-zero@test.local",
     },
   });
-  const design = await prisma.design.create({
-    data: { merchantId: merchant.id, name: "TEST Design" },
-  });
   const tshirtType = await prisma.productType.findUniqueOrThrow({
     where: { slug: "test-tshirt" },
   });
   const mugType = await prisma.productType.findUniqueOrThrow({
     where: { slug: "test-mug" },
+  });
+  const design = await prisma.design.create({
+    data: { merchantId: merchant.id, name: "TEST Design", productTypeId: tshirtType.id },
   });
   const tshirt = await prisma.product.create({
     data: {

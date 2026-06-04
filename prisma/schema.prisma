@@ -69,6 +69,7 @@ model ProductType {
   printAreas   PrintArea[]
   products     Product[]
   capabilities PrinterCapability[]
+  designs      Design[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -468,6 +469,12 @@ model Design {
   merchant      Merchant @relation(fields: [merchantId], references: [id])
   merchantId    String
   name          String
+
+  // The product type this design is made for. Validation is keyed on
+  // productType + placement (see PrintArea), so a design must carry its type to
+  // know which PrintArea spec each uploaded print file is checked against.
+  productType   ProductType @relation(fields: [productTypeId], references: [id])
+  productTypeId String
 
   // Mockup preview (reference only — NOT production).
   mockup_url    String?

@@ -94,13 +94,6 @@ async function main() {
     },
   });
 
-  const designA = await prisma.design.create({
-    data: { merchantId: merchantA.id, name: "TESTAPI Design A" },
-  });
-  const designB = await prisma.design.create({
-    data: { merchantId: merchantB.id, name: "TESTAPI Design B" },
-  });
-
   // Catalog: a DTG-capable tee (routable) + a PAPER_PRINT business card whose
   // capability has min_qty 50 (qty 1 is a VALID capability but UNROUTABLE).
   const tshirtType = await prisma.productType.findUniqueOrThrow({
@@ -108,6 +101,27 @@ async function main() {
   });
   const cardType = await prisma.productType.findUniqueOrThrow({
     where: { slug: "test-business-card" },
+  });
+
+  // designA is the orderable happy-path design: one FRONT placement, PASSED, so
+  // the orderability gate (≥1 placement, all PASSED) lets it through. designB
+  // belongs to merchant B and is only used for the ownership-rejection case.
+  const designA = await prisma.design.create({
+    data: {
+      merchantId: merchantA.id,
+      name: "TESTAPI Design A",
+      productTypeId: tshirtType.id,
+      placements: {
+        create: {
+          placement: "FRONT",
+          print_file_url: "stub://print-files/testapi-front.png",
+          validation_status: "PASSED",
+        },
+      },
+    },
+  });
+  const designB = await prisma.design.create({
+    data: { merchantId: merchantB.id, name: "TESTAPI Design B", productTypeId: tshirtType.id },
   });
   const tee = await prisma.product.create({
     data: {

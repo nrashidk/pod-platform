@@ -24,10 +24,12 @@
     "test:billing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/billing-reconcile-smoke.ts",
     "test:api-intake": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/api-intake-smoke.ts",
     "test:wallet-topup": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/wallet-topup-smoke.ts",
-    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:printer && npm run test:billing && npm run test:api-intake && npm run test:wallet-topup"
+    "test:design-manager": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/design-manager-smoke.ts",
+    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:printer && npm run test:billing && npm run test:api-intake && npm run test:wallet-topup && npm run test:design-manager"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
+    "@vercel/blob": "^2.4.0",
     "better-auth": "^1.6.13",
     "next": "^15.2.0",
     "react": "^19.0.0",

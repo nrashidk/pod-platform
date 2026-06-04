@@ -79,6 +79,12 @@ export default async function MerchantPage({
             <p className="mt-1 text-sm text-gray-600">{t("subtitle", locale)}</p>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href={`/merchant/designs?lang=${locale}`}
+              className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              {t("manageDesigns", locale)}
+            </Link>
             <LangToggle locale={locale} />
             <LogoutButton label={t("logout", locale)} />
           </div>
