@@ -353,6 +353,8 @@ model Merchant {
   orders        Order[]
   designs       Design[]
   users         User[]            // back-office MERCHANT logins scoped to this merchant
+  apiKeys       MerchantApiKey[]      // programmatic intake credentials (hashed at rest)
+  idempotencyKeys OrderIdempotencyKey[] // per-merchant intake idempotency records
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -637,6 +639,71 @@ model PrinterLedgerEntry {
   createdAt   DateTime @default(now())
 
   @@index([printerId, settled])
+}
+
+// ═════════════════════════════════════════════════════════════
+// PROGRAMMATIC INTAKE  (API-key auth + idempotent order creation)
+//
+// The machine-facing counterpart to the back-office Better-Auth layer below: a
+// merchant's own system authenticates with a per-merchant API key (Bearer) and
+// submits orders to /api/v1. Resolving the key identifies the Merchant; all
+// order creation is scoped to THAT merchant, never to anything in the request
+// body. Separate from the User/Session RBAC tables on purpose — these are
+// long-lived service credentials, not interactive logins.
+// ═════════════════════════════════════════════════════════════
+
+// A per-merchant API key. The raw token is shown to the operator ONCE at
+// creation and never stored — we keep only SHA-256(token).
+//
+// Why SHA-256 and not scrypt/bcrypt (the password hash): passwords are
+// low-entropy, so their hashes must be deliberately SLOW + per-row SALTED to
+// resist brute force. An API key is 256 bits of CSPRNG randomness — there is
+// nothing to brute-force — so a single fast unsalted SHA-256 is just as safe
+// AND lets us resolve a presented key with ONE indexed lookup (token_hash is
+// @unique). A salted password hash would force a full-table scan per request.
+// token_prefix + last4 are stored in clear for display/identification only.
+model MerchantApiKey {
+  id          String   @id @default(cuid())
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  merchantId  String
+  name        String   // operator-set label ("prod store", "staging")
+  token_hash  String   @unique // SHA-256(raw token), hex; the only copy we keep
+  token_prefix String  // e.g. "pod_live_" — display only
+  last4       String   // last 4 chars of the raw token — display only
+
+  last_used_at DateTime?
+  revoked_at   DateTime? // set on revoke; a revoked key never resolves again
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([merchantId])
+}
+
+// Per-merchant idempotency record for POST /api/v1/orders. The @@unique on
+// (merchantId, idempotency_key) is the RACE-SAFE serialization point: two
+// simultaneous retries both attempt the insert, exactly one wins (the other
+// gets a unique violation and returns the original order or 409), so a dropped
+// connection can never create two orders or double-bill.
+//
+// status: PENDING while the winning request is still creating the order;
+// COMPLETED once orderId is set. A concurrent caller seeing PENDING returns
+// 409 request_in_progress (safe — never a second order). On creation failure
+// the row is deleted so the same key can be legitimately retried.
+model OrderIdempotencyKey {
+  id              String   @id @default(cuid())
+  merchant        Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  merchantId      String
+  idempotency_key String
+  // The created order, once it exists. Nullable while status=PENDING. No FK
+  // relation needed (one-directional pointer); set after createOrderWithRouting.
+  orderId         String?
+  status          String   @default("PENDING") // PENDING | COMPLETED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([merchantId, idempotency_key])
 }
 
 // ═════════════════════════════════════════════════════════════

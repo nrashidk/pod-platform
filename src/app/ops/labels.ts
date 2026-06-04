@@ -25,6 +25,7 @@ const UI = {
   logout: { en: "Sign out", ar: "تسجيل الخروج" },
   newOrder: { en: "New order", ar: "طلب جديد" },
   billing: { en: "Billing ledger", ar: "دفتر الفوترة" },
+  apiKeys: { en: "API keys", ar: "مفاتيح API" },
   noOrders: {
     en: "No orders yet. Run the demo seed (see README/instructions).",
     ar: "لا توجد طلبات بعد. شغّل بيانات العرض التجريبي.",

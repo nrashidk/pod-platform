@@ -71,6 +71,12 @@ export default async function OpsPage({
               >
                 {t("billing", locale)}
               </Link>
+              <Link
+                href={`/ops/api-keys?lang=${locale}`}
+                className="text-gray-900 underline-offset-2 hover:underline"
+              >
+                {t("apiKeys", locale)}
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-3">
