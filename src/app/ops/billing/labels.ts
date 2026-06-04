@@ -18,6 +18,12 @@ const UI = {
     ar: "تم إنشاء الطلب وتسجيل الفوترة.",
   },
 
+  walletBalances: { en: "Wallet balances", ar: "أرصدة المحافظ" },
+  balance: { en: "Balance", ar: "الرصيد" },
+  noWallets: {
+    en: "No wallets yet.",
+    ar: "لا توجد محافظ بعد.",
+  },
   merchantsOwed: { en: "Per merchant — total owed", ar: "لكل تاجر — إجمالي المستحق" },
   printersPayable: {
     en: "Per printer — total payable",

@@ -59,13 +59,24 @@ export default async function BillingPage({
     }),
   ]);
 
-  // ── Merchant + printer name lookups. ──
-  const [merchants, printers] = await Promise.all([
+  // ── Merchant + printer name lookups, and wallet balances (the real money-in
+  // figure — net of top-ups and recorded charges, distinct from "total owed"). ──
+  const [merchants, printers, wallets] = await Promise.all([
     prisma.merchant.findMany({ select: { id: true, name: true } }),
     prisma.printer.findMany({ select: { id: true, name: true } }),
+    prisma.wallet.findMany({
+      select: { merchantId: true, balance: true, currency: true },
+    }),
   ]);
   const merchantName = new Map(merchants.map((m) => [m.id, m.name]));
   const printerName = new Map(printers.map((p) => [p.id, p.name]));
+  const walletRows = wallets
+    .map((w) => ({
+      merchant: merchantName.get(w.merchantId) ?? w.merchantId,
+      balance: round2(Number(w.balance)),
+      currency: w.currency,
+    }))
+    .sort((a, b) => a.merchant.localeCompare(b.merchant));
 
   // ── Per merchant: total owed (charges are negative → take abs). ──
   const owedByMerchant = new Map<string, number>();
@@ -165,6 +176,29 @@ export default async function BillingPage({
             {bt("createdNotice", locale)}
           </p>
         )}
+
+        {/* Wallet balances — shown regardless of billing data (a merchant can
+            top up before any order exists). The money-in rail surfaced here. */}
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-semibold text-gray-900">
+            {bt("walletBalances", locale)}
+          </h2>
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            {walletRows.length === 0 ? (
+              <p className="p-6 text-center text-sm text-gray-500">
+                {bt("noWallets", locale)}
+              </p>
+            ) : (
+              <Table
+                head={[bt("merchant", locale), bt("balance", locale)]}
+                rows={walletRows.map((w) => [
+                  w.merchant,
+                  money(w.balance, w.currency),
+                ])}
+              />
+            )}
+          </div>
+        </section>
 
         {!hasData ? (
           <p className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">

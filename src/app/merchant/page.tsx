@@ -15,8 +15,10 @@ import Link from "next/link";
 import type { FulfillmentStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth-context";
 import { getOrdersForCaller } from "@/lib/orders-access";
+import { prisma } from "@/lib/prisma";
 import { getDirection, isLocale, type Locale } from "@/lib/i18n";
 import { LogoutButton } from "@/components/logout-button";
+import { TopUpForm } from "./TopUpForm";
 import {
   orderStatusLabel,
   fulfillmentStatusLabel,
@@ -37,7 +39,7 @@ function money(value: { toString(): string }, currency: string): string {
 export default async function MerchantPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lang?: string }>;
+  searchParams: Promise<{ lang?: string; topup?: string }>;
 }) {
   // DATA-LAYER GATE (not middleware): MERCHANT-only. requireRole reads the
   // session server-side and redirects anyone who isn't a signed-in merchant.
@@ -48,11 +50,23 @@ export default async function MerchantPage({
   const sp = await searchParams;
   const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
   const dir = getDirection(locale);
+  const topupState = sp.topup; // "processing" | "cancelled" after a gateway return
 
   // Scoped read: ONLY this merchant's orders, filtered at the query level by the
   // session's merchantId (never a request param). getOrdersForCaller throws if a
   // MERCHANT context somehow has no merchantId rather than returning everything.
-  const orders = await getOrdersForCaller(ctx);
+  // The wallet is read for THIS merchant only (session merchantId, never input).
+  const [orders, wallet] = await Promise.all([
+    getOrdersForCaller(ctx),
+    ctx.merchantId
+      ? prisma.wallet.findUnique({
+          where: { merchantId: ctx.merchantId },
+          select: { balance: true, currency: true },
+        })
+      : Promise.resolve(null),
+  ]);
+  const balance = wallet ? Number(wallet.balance) : 0;
+  const walletCurrency = wallet?.currency ?? "AED";
 
   return (
     <div dir={dir} lang={locale} className="min-h-screen bg-gray-50 text-gray-900">
@@ -69,6 +83,48 @@ export default async function MerchantPage({
             <LogoutButton label={t("logout", locale)} />
           </div>
         </header>
+
+        {/* Gateway-return banners. "processing" = paid at the gateway; the
+            wallet credits from the webhook, so the balance may not reflect it
+            yet. Never a credit signal — purely informational. */}
+        {topupState === "processing" && (
+          <p className="mb-6 rounded-md bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
+            {t("processingNotice", locale)}
+          </p>
+        )}
+        {topupState === "cancelled" && (
+          <p className="mb-6 rounded-md bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+            {t("cancelledNotice", locale)}
+          </p>
+        )}
+
+        {/* Wallet: balance + top-up. */}
+        <section className="mb-8 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-gray-900">
+              {t("walletTitle", locale)}
+            </h2>
+            <div className="text-sm text-gray-500">
+              {t("walletBalance", locale)}:{" "}
+              <span className="font-mono text-base font-semibold text-gray-900">
+                {balance.toFixed(2)} {walletCurrency}
+              </span>
+            </div>
+          </div>
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            <h3 className="text-sm font-medium text-gray-900">
+              {t("topUpHeading", locale)}
+            </h3>
+            <p className="mt-1 mb-3 text-sm text-gray-500">
+              {t("topUpHint", locale)}
+            </p>
+            <TopUpForm locale={locale} />
+          </div>
+        </section>
+
+        <h2 className="mb-3 text-sm font-semibold text-gray-900">
+          {t("ordersHeading", locale)}
+        </h2>
 
         {orders.length === 0 ? (
           <p className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">

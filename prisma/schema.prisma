@@ -373,6 +373,7 @@ model Wallet {
   auto_recharge_amount    Decimal? @db.Decimal(12, 2)
 
   transactions  WalletTransaction[]
+  topUps        WalletTopUp[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -390,6 +391,49 @@ model WalletTransaction {
   createdAt   DateTime      @default(now())
 
   @@index([walletId, createdAt])
+}
+
+// A merchant-initiated wallet top-up (money-in rail). Created status=INITIATED
+// when the merchant starts a checkout; flipped to COMPLETED by the VERIFIED
+// payment webhook, which is the ONLY thing that credits the wallet (the browser
+// success-redirect never does). id == the provider's client_reference_id, so the
+// webhook maps a verified payment back to this row independently of any state
+// the browser carried. Provider-agnostic by design (see src/lib/payments) — a
+// gateway swap (PayTabs/Telr) reuses this table unchanged.
+model WalletTopUp {
+  id                  String   @id @default(cuid())
+  wallet              Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  walletId            String
+  merchantId          String
+  provider            String   // "stripe" today; the active PaymentProvider's name
+  provider_session_id String?  @unique // gateway checkout-session id (reference)
+  amount              Decimal  @db.Decimal(12, 2)
+  currency            String   @default("AED")
+  status              String   @default("INITIATED") // INITIATED | COMPLETED
+  // The credit transaction, once the webhook has applied it. One-directional
+  // pointer (no back-relation needed); set inside the crediting transaction.
+  walletTransactionId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([walletId, createdAt])
+}
+
+// Idempotency ledger for inbound payment-gateway webhooks. The @@unique on
+// (provider, event_id) is the RACE-SAFE serialization point — IDENTICAL to the
+// OrderIdempotencyKey pattern: a gateway redelivers webhooks (Stripe retries on
+// any non-2xx / timeout), so two deliveries of the SAME event both attempt this
+// insert; exactly one wins, the loser hits the unique violation and the credit
+// transaction rolls back. Net effect: the same event credits the wallet EXACTLY
+// once. event_id is the gateway's own event id (Stripe `evt_…`).
+model ProcessedWebhookEvent {
+  id        String   @id @default(cuid())
+  provider  String   // "stripe"
+  event_id  String   // the gateway's event id
+  createdAt DateTime @default(now())
+
+  @@unique([provider, event_id])
 }
 
 // An external store connected to the platform. Interchangeable adapter — core

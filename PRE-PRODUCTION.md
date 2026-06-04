@@ -50,6 +50,27 @@ and gateway must be confirmed before any checkout flow ships.
 - [ ] Confirm the payment gateway.
 - [ ] Only then build and enable the checkout/payment phase.
 
+### 7. Stripe wallet top-ups — go live (keys + webhook registration)
+The merchant→platform wallet top-up rail (`src/lib/payments/`) ships in **test
+mode**. Before launch it must be switched to live mode. This is the money-in
+rail (merchants funding their own prepaid wallet); it does **not** touch the
+buyer→store gateway, which remains blocked under item 5.
+
+- [ ] Replace the test `STRIPE_SECRET_KEY` (`sk_test_…`) with the live key
+      (`sk_live_…`) in the production secret manager — never in the repo.
+- [ ] Register the production webhook endpoint in the Stripe Dashboard pointing
+      at `https://<prod-domain>/api/webhooks/stripe`, subscribed to
+      `checkout.session.completed`, and put its signing secret in
+      `STRIPE_WEBHOOK_SECRET` (`whsec_…`). The webhook is the ONLY thing that
+      credits a wallet, so an unregistered/misconfigured endpoint means top-ups
+      silently never credit.
+- [ ] Set `NEXT_PUBLIC_APP_URL` to the production HTTPS origin (used to build
+      Checkout success/cancel return URLs).
+- [ ] Confirm **AED** is enabled on the live Stripe account.
+- [ ] Confirm this rail is permitted under the resolved UAE entity/gateway
+      decision (item 5) — or swap `StripeProvider` for the chosen UAE gateway at
+      the `src/lib/payments/index.ts` seam.
+
 ## Build & Deployment
 
 ### 6. `npm run build` fails at type-check on `prisma/*-smoke.ts` — RESOLVED

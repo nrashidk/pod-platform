@@ -23,7 +23,8 @@
     "test:printer": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/printer-advance-smoke.ts",
     "test:billing": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/billing-reconcile-smoke.ts",
     "test:api-intake": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/api-intake-smoke.ts",
-    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:printer && npm run test:billing && npm run test:api-intake"
+    "test:wallet-topup": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/wallet-topup-smoke.ts",
+    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:printer && npm run test:billing && npm run test:api-intake && npm run test:wallet-topup"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
@@ -31,7 +32,8 @@
     "next": "^15.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "stripe": "^22.2.0"
   },
   "overrides": {
     "kysely": "0.28.17"
