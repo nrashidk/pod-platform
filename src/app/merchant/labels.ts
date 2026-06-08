@@ -11,6 +11,11 @@ export {
   methodLabel,
 } from "../ops/labels";
 
+// Design placement/orderability status labels (PASSED/FLAGGED/PENDING/NONE) live
+// with the design manager; re-exported here so the dashboard's design-status
+// panel and the shared badges render them without duplicating the EN/AR table.
+export { statusLabel as statusLabelFor } from "./designs/labels";
+
 type Bi = { en: string; ar: string };
 const pick = (b: Bi, locale: Locale): string => (locale === "ar" ? b.ar : b.en);
 
@@ -26,6 +31,55 @@ const UI = {
   langAR: { en: "العربية", ar: "العربية" },
   logout: { en: "Sign out", ar: "تسجيل الخروج" },
   manageDesigns: { en: "Manage designs", ar: "إدارة التصاميم" },
+
+  // ── Shell (shared header/nav across merchant pages) ──
+  appName: { en: "POD Platform", ar: "منصة POD" },
+  appTagline: { en: "Merchant", ar: "التاجر" },
+  navDashboard: { en: "Dashboard", ar: "لوحة التحكم" },
+  navOrders: { en: "Orders", ar: "الطلبات" },
+  navDesigns: { en: "Designs", ar: "التصاميم" },
+  skipToContent: { en: "Skip to content", ar: "تخطَّ إلى المحتوى" },
+
+  // ── Dashboard home ──
+  dashTitle: { en: "Dashboard", ar: "لوحة التحكم" },
+  welcomeBack: { en: "Welcome back", ar: "مرحبًا بعودتك" },
+  dashSubtitle: {
+    en: "Your wallet, orders, and designs at a glance.",
+    ar: "محفظتك وطلباتك وتصاميمك في لمحة.",
+  },
+  attentionHeading: { en: "Needs attention", ar: "يحتاج إلى انتباه" },
+  attnFlaggedDesigns: {
+    // {n} flagged design(s) — phrased once; the count is interpolated.
+    en: "design(s) flagged — fix the files to make them orderable.",
+    ar: "تصميم موسوم — أصلِح الملفات لجعلها قابلة للطلب.",
+  },
+  attnLowBalance: {
+    en: "Your wallet balance is low.",
+    ar: "رصيد محفظتك منخفض.",
+  },
+  reviewDesigns: { en: "Review designs", ar: "مراجعة التصاميم" },
+  topUpNow: { en: "Top up", ar: "اشحن" },
+
+  // KPI cards
+  kpiWalletTitle: { en: "Wallet balance", ar: "رصيد المحفظة" },
+  kpiOrdersTitle: { en: "Orders", ar: "الطلبات" },
+  kpiDesignsTitle: { en: "Designs", ar: "التصاميم" },
+  kpiActive: { en: "active", ar: "نشِطة" },
+  kpiInProduction: { en: "in production", ar: "قيد الإنتاج" },
+  kpiShipped: { en: "shipped", ar: "تم شحنها" },
+  kpiCompleted: { en: "completed", ar: "مكتملة" },
+  kpiOrderable: { en: "orderable", ar: "قابلة للطلب" },
+  kpiFlagged: { en: "flagged", ar: "موسومة" },
+  kpiInProgress: { en: "in progress", ar: "قيد الإعداد" },
+  kpiNone: { en: "—", ar: "—" },
+
+  // Recent orders / design status panels
+  recentOrders: { en: "Recent orders", ar: "أحدث الطلبات" },
+  designStatus: { en: "Design status", ar: "حالة التصاميم" },
+  viewAllOrders: { en: "All orders", ar: "كل الطلبات" },
+  viewAllDesigns: { en: "All designs", ar: "كل التصاميم" },
+  emptyOrdersShort: { en: "No orders yet.", ar: "لا توجد طلبات بعد." },
+  emptyDesignsShort: { en: "No designs yet.", ar: "لا توجد تصاميم بعد." },
   noOrders: {
     en: "You don't have any orders yet.",
     ar: "ليست لديك أي طلبات بعد.",
@@ -37,6 +91,8 @@ const UI = {
   method: { en: "Method", ar: "الطريقة" },
   qty: { en: "Qty", ar: "الكمية" },
   bulk: { en: "Bulk", ar: "كمية كبيرة" },
+  orderable: { en: "Orderable", ar: "قابل للطلب" },
+  notOrderable: { en: "Not orderable yet", ar: "غير قابل للطلب بعد" },
 
   // ── Wallet / top-up ──
   ordersHeading: { en: "Orders", ar: "الطلبات" },

@@ -1,62 +1,51 @@
-// Merchant-facing view (server component). A signed-in MERCHANT sees ONLY their
-// OWN orders — scoped in the data layer from the session's merchantId, never
-// from client input (reuses the tested getOrdersForCaller MERCHANT branch).
+// Merchant dashboard home (server component). A signed-in MERCHANT lands here and
+// sees ONLY their OWN data — orders, wallet, and designs are each scoped in the
+// data layer from the session's merchantId, never from client input (reusing the
+// tested getOrdersForCaller MERCHANT branch, the scoped wallet read, and
+// listMyDesigns). This page is COMPOSITION ONLY: every number is derived in-render
+// from data the existing read functions already return — no new queries, no logic.
 //
-// READ-ONLY by design: merchants WATCH order progress; they do NOT advance
-// fulfillments (that is printer/operator territory). There are deliberately NO
-// write controls — no advance forms, no server actions, no editing.
-//
-// We also deliberately OMIT each fulfillment's wholesale_cost: that is the
-// platform's cost to the printer and reveals the margin charged to the store. A
-// merchant sees their RETAIL total (what they're billed) but not the wholesale
-// leg. Bilingual EN/AR with RTL — consistent with /ops, /printer and /login.
+// READ-ONLY by design: merchants WATCH progress; advancing fulfillments is
+// printer/operator territory and is never offered here. Bilingual EN/AR with RTL.
 
 import Link from "next/link";
-import type { FulfillmentStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth-context";
 import { getOrdersForCaller } from "@/lib/orders-access";
+import { listMyDesigns } from "@/lib/designs";
 import { prisma } from "@/lib/prisma";
-import { getDirection, isLocale, type Locale } from "@/lib/i18n";
-import { LogoutButton } from "@/components/logout-button";
+import { isLocale, type Locale } from "@/lib/i18n";
+import { MerchantShell } from "./MerchantShell";
 import { TopUpForm } from "./TopUpForm";
-import {
-  orderStatusLabel,
-  fulfillmentStatusLabel,
-  methodLabel,
-  t,
-} from "./labels";
+import { OrderStatusBadge, Badge } from "./badges";
+import { t } from "./labels";
 
-// Always render fresh data — fulfillment statuses move between requests (driven
-// by printers/operators elsewhere; the merchant just sees the latest state).
+// Always render fresh data — fulfillment + design statuses move between requests.
 export const dynamic = "force-dynamic";
 
-// Prisma Decimal fields arrive as Decimal objects (or strings via JSON);
-// normalise through toString so we don't depend on the runtime Decimal type.
+// Presentational low-balance threshold (AED). Min top-up is 50 and bulk retention
+// triggers at 1,000, so 200 is a sensible early warning. Display-only — it gates
+// nothing in the data layer.
+const LOW_BALANCE_AED = 200;
+
 function money(value: { toString(): string }, currency: string): string {
   return `${Number(value.toString()).toFixed(2)} ${currency}`;
 }
 
-export default async function MerchantPage({
+export default async function MerchantDashboardPage({
   searchParams,
 }: {
   searchParams: Promise<{ lang?: string; topup?: string }>;
 }) {
-  // DATA-LAYER GATE (not middleware): MERCHANT-only. requireRole reads the
-  // session server-side and redirects anyone who isn't a signed-in merchant.
-  // Independent of middleware — if middleware were bypassed, this still holds.
-  // ctx.merchantId is the session identity the scoped read below filters on.
+  // DATA-LAYER GATE: MERCHANT-only. requireRole reads the session server-side and
+  // redirects anyone who isn't a signed-in merchant. ctx.merchantId is the
+  // identity every scoped read below filters on (never a request param).
   const ctx = await requireRole("MERCHANT");
 
   const sp = await searchParams;
   const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
-  const dir = getDirection(locale);
   const topupState = sp.topup; // "processing" | "cancelled" after a gateway return
 
-  // Scoped read: ONLY this merchant's orders, filtered at the query level by the
-  // session's merchantId (never a request param). getOrdersForCaller throws if a
-  // MERCHANT context somehow has no merchantId rather than returning everything.
-  // The wallet is read for THIS merchant only (session merchantId, never input).
-  const [orders, wallet] = await Promise.all([
+  const [orders, wallet, designs] = await Promise.all([
     getOrdersForCaller(ctx),
     ctx.merchantId
       ? prisma.wallet.findUnique({
@@ -64,249 +53,373 @@ export default async function MerchantPage({
           select: { balance: true, currency: true },
         })
       : Promise.resolve(null),
+    ctx.merchantId ? listMyDesigns(ctx.merchantId) : Promise.resolve([]),
   ]);
+
   const balance = wallet ? Number(wallet.balance) : 0;
   const walletCurrency = wallet?.currency ?? "AED";
 
+  // ── Derived order counts (presentation only) ──
+  const orderStats = {
+    active: orders.filter(
+      (o) =>
+        o.status !== "CLOSED" &&
+        o.status !== "CANCELLED" &&
+        o.status !== "DELIVERED"
+    ).length,
+    inProduction: orders.filter((o) => o.status === "IN_PRODUCTION").length,
+    shipped: orders.filter(
+      (o) => o.status === "SHIPPED" || o.status === "PARTIALLY_SHIPPED"
+    ).length,
+    completed: orders.filter(
+      (o) => o.status === "CLOSED" || o.status === "DELIVERED"
+    ).length,
+  };
+
+  // ── Derived design counts ──
+  const designFlagged = designs.filter((d) =>
+    d.placements.some((p) => p.status === "FLAGGED")
+  );
+  const designStats = {
+    orderable: designs.filter((d) => d.orderable).length,
+    flagged: designFlagged.length,
+    inProgress: designs.filter(
+      (d) => !d.orderable && !d.placements.some((p) => p.status === "FLAGGED")
+    ).length,
+  };
+
+  const lowBalance = balance < LOW_BALANCE_AED;
+  const hasAttention = designFlagged.length > 0 || lowBalance;
+
+  const recentOrders = orders.slice(0, 5);
+  const recentDesigns = designs.slice(0, 5);
+
   return (
-    <div dir={dir} lang={locale} className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-        <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {t("title", locale)}
-            </h1>
-            <p className="mt-1 text-sm text-gray-600">{t("subtitle", locale)}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href={`/merchant/designs?lang=${locale}`}
-              className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
-            >
-              {t("manageDesigns", locale)}
-            </Link>
-            <LangToggle locale={locale} />
-            <LogoutButton label={t("logout", locale)} />
-          </div>
-        </header>
+    <MerchantShell
+      locale={locale}
+      active="dashboard"
+      basePath="/merchant"
+      wallet={wallet ? { balance, currency: walletCurrency } : null}
+    >
+      {/* Page header */}
+      <div className="animate-rise" style={{ animationDelay: "0ms" }}>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          {t("welcomeBack", locale)}
+        </h1>
+        <p className="mt-1.5 text-sm text-muted">
+          <span className="font-medium text-ink">{ctx.email}</span>
+          <span className="mx-2 text-faint" aria-hidden>
+            ·
+          </span>
+          {t("dashSubtitle", locale)}
+        </p>
+      </div>
 
-        {/* Gateway-return banners. "processing" = paid at the gateway; the
-            wallet credits from the webhook, so the balance may not reflect it
-            yet. Never a credit signal — purely informational. */}
-        {topupState === "processing" && (
-          <p className="mb-6 rounded-md bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
-            {t("processingNotice", locale)}
-          </p>
-        )}
-        {topupState === "cancelled" && (
-          <p className="mb-6 rounded-md bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-            {t("cancelledNotice", locale)}
-          </p>
-        )}
+      {/* Gateway-return banners — purely informational; the wallet credits from
+          the webhook, never from this page. */}
+      {topupState === "processing" && (
+        <p className="mt-6 rounded-xl border border-info-fg/15 bg-info-bg px-4 py-3 text-sm font-medium text-info-fg">
+          {t("processingNotice", locale)}
+        </p>
+      )}
+      {topupState === "cancelled" && (
+        <p className="mt-6 rounded-xl border border-warn-fg/15 bg-warn-bg px-4 py-3 text-sm font-medium text-warn-fg">
+          {t("cancelledNotice", locale)}
+        </p>
+      )}
 
-        {/* Wallet: balance + top-up. */}
-        <section className="mb-8 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold text-gray-900">
-              {t("walletTitle", locale)}
-            </h2>
-            <div className="text-sm text-gray-500">
-              {t("walletBalance", locale)}:{" "}
-              <span className="font-mono text-base font-semibold text-gray-900">
-                {balance.toFixed(2)} {walletCurrency}
-              </span>
-            </div>
+      {/* Needs attention — only renders when something is actually wrong. */}
+      {hasAttention && (
+        <section
+          className="mt-6 animate-rise rounded-2xl border border-warn-fg/20 bg-warn-bg/60 p-5 shadow-card"
+          style={{ animationDelay: "60ms" }}
+        >
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-warn-fg">
+            <AlertIcon />
+            {t("attentionHeading", locale)}
+          </h2>
+          <ul className="mt-3 space-y-2.5">
+            {designFlagged.length > 0 && (
+              <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface/70 px-4 py-3">
+                <span className="text-sm text-ink">
+                  <span className="font-semibold">{designFlagged.length}</span>{" "}
+                  {t("attnFlaggedDesigns", locale)}
+                </span>
+                <Link
+                  href={`/merchant/designs?lang=${locale}`}
+                  className="shrink-0 rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-600"
+                >
+                  {t("reviewDesigns", locale)}
+                </Link>
+              </li>
+            )}
+            {lowBalance && (
+              <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface/70 px-4 py-3">
+                <span className="text-sm text-ink">
+                  {t("attnLowBalance", locale)}{" "}
+                  <span className="font-mono font-semibold tabular-nums">
+                    ({balance.toFixed(2)} {walletCurrency})
+                  </span>
+                </span>
+                <a
+                  href="#wallet"
+                  className="shrink-0 rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-600"
+                >
+                  {t("topUpNow", locale)}
+                </a>
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
+
+      {/* KPI row */}
+      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* Wallet */}
+        <section
+          id="wallet"
+          className="animate-rise scroll-mt-24 rounded-2xl border border-hairline bg-surface p-5 shadow-card"
+          style={{ animationDelay: "100ms" }}
+        >
+          <KpiTitle>{t("kpiWalletTitle", locale)}</KpiTitle>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="font-mono text-3xl font-semibold tabular-nums text-ink">
+              {balance.toFixed(2)}
+            </span>
+            <span className="text-sm font-medium text-faint">{walletCurrency}</span>
           </div>
-          <div className="mt-4 border-t border-gray-100 pt-4">
-            <h3 className="text-sm font-medium text-gray-900">
+          <div className="mt-4 border-t border-hairline pt-4">
+            <h3 className="text-sm font-medium text-ink">
               {t("topUpHeading", locale)}
             </h3>
-            <p className="mt-1 mb-3 text-sm text-gray-500">
-              {t("topUpHint", locale)}
-            </p>
+            <p className="mb-3 mt-1 text-xs text-muted">{t("topUpHint", locale)}</p>
             <TopUpForm locale={locale} />
           </div>
         </section>
 
-        <h2 className="mb-3 text-sm font-semibold text-gray-900">
-          {t("ordersHeading", locale)}
-        </h2>
+        {/* Orders */}
+        <section
+          className="animate-rise rounded-2xl border border-hairline bg-surface p-5 shadow-card"
+          style={{ animationDelay: "160ms" }}
+        >
+          <KpiTitle>{t("kpiOrdersTitle", locale)}</KpiTitle>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="font-mono text-3xl font-semibold tabular-nums text-ink">
+              {orderStats.active}
+            </span>
+            <span className="text-sm text-muted">{t("kpiActive", locale)}</span>
+          </div>
+          <dl className="mt-4 space-y-2 border-t border-hairline pt-4">
+            <StatRow label={t("kpiInProduction", locale)} value={orderStats.inProduction} tone="prod" />
+            <StatRow label={t("kpiShipped", locale)} value={orderStats.shipped} tone="info" />
+            <StatRow label={t("kpiCompleted", locale)} value={orderStats.completed} tone="ok" />
+          </dl>
+        </section>
 
-        {orders.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
-            {t("noOrders", locale)}
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {orders.map((order) => (
-              <li
-                key={order.id}
-                className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
-              >
-                <details className="group">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 hover:bg-gray-50">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <span className="font-mono">{order.id.slice(-8)}</span>
-                        <span aria-hidden>·</span>
-                        <span>{order.recipient_name}</span>
-                      </div>
-                      <div className="mt-1 text-sm text-gray-500">
-                        {t("retailTotal", locale)}:{" "}
-                        {money(order.retail_total, order.currency)} ·{" "}
-                        {order.fulfillments.length} {t("fulfillments", locale)}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <OrderStatusBadge
-                        status={order.status}
-                        label={orderStatusLabel(order.status, locale)}
-                      />
-                      <span className="text-gray-400 transition-transform group-open:rotate-90 rtl:rotate-180 rtl:group-open:-rotate-90">
-                        ›
+        {/* Designs */}
+        <section
+          className="animate-rise rounded-2xl border border-hairline bg-surface p-5 shadow-card"
+          style={{ animationDelay: "220ms" }}
+        >
+          <KpiTitle>{t("kpiDesignsTitle", locale)}</KpiTitle>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="font-mono text-3xl font-semibold tabular-nums text-ink">
+              {designStats.orderable}
+            </span>
+            <span className="text-sm text-muted">{t("kpiOrderable", locale)}</span>
+          </div>
+          <dl className="mt-4 space-y-2 border-t border-hairline pt-4">
+            <StatRow label={t("kpiFlagged", locale)} value={designStats.flagged} tone="warn" />
+            <StatRow label={t("kpiInProgress", locale)} value={designStats.inProgress} tone="info" />
+          </dl>
+        </section>
+      </div>
+
+      {/* Recent orders + design status */}
+      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* Recent orders (wide) */}
+        <section
+          className="animate-rise rounded-2xl border border-hairline bg-surface p-5 shadow-card lg:col-span-2"
+          style={{ animationDelay: "280ms" }}
+        >
+          <PanelHeader
+            title={t("recentOrders", locale)}
+            href={`/merchant/orders?lang=${locale}`}
+            linkLabel={t("viewAllOrders", locale)}
+            locale={locale}
+          />
+          {recentOrders.length === 0 ? (
+            <EmptyRow>{t("emptyOrdersShort", locale)}</EmptyRow>
+          ) : (
+            <ul className="mt-3 divide-y divide-hairline">
+              {recentOrders.map((order) => (
+                <li
+                  key={order.id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-mono text-xs text-muted">
+                        {order.id.slice(-8)}
+                      </span>
+                      <span aria-hidden className="text-hairline-strong">
+                        ·
+                      </span>
+                      <span className="truncate font-medium text-ink">
+                        {order.recipient_name}
                       </span>
                     </div>
-                  </summary>
-
-                  {/* Expandable fulfillment breakdown — READ-ONLY (no advance
-                      controls; merchants only watch progress). */}
-                  <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4">
-                    <ul className="space-y-3">
-                      {order.fulfillments.map((f) => (
-                        <li
-                          key={f.id}
-                          className="rounded-lg border border-gray-200 bg-white p-4"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="font-medium">
-                              {t("printer", locale)}: {f.printer.name}
-                              {f.is_bulk && (
-                                <span className="ms-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                                  {t("bulk", locale)}
-                                </span>
-                              )}
-                            </div>
-                            <FulfillmentStatusBadge
-                              status={f.status}
-                              label={fulfillmentStatusLabel(f.status, locale)}
-                            />
-                          </div>
-
-                          {/* Lines: product, variant, method, qty */}
-                          <ul className="mt-3 space-y-1 border-t border-gray-100 pt-3 text-sm text-gray-700">
-                            {f.lines.map((l) => (
-                              <li
-                                key={l.id}
-                                className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
-                              >
-                                <span className="font-medium">
-                                  {locale === "ar"
-                                    ? l.product.name_ar
-                                    : l.product.name_en}
-                                </span>
-                                <span className="text-gray-400">
-                                  ({l.variant.sku})
-                                </span>
-                                <span aria-hidden className="text-gray-300">
-                                  ·
-                                </span>
-                                <span>
-                                  {t("method", locale)}:{" "}
-                                  {methodLabel(l.method, locale)}
-                                </span>
-                                <span aria-hidden className="text-gray-300">
-                                  ·
-                                </span>
-                                <span>
-                                  {t("qty", locale)}: {l.quantity}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="mt-0.5 text-xs text-muted">
+                      {money(order.retail_total, order.currency)} ·{" "}
+                      {order.fulfillments.length} {t("fulfillments", locale)}
+                    </div>
                   </div>
-                </details>
-              </li>
-            ))}
-          </ul>
-        )}
+                  <OrderStatusBadge status={order.status} locale={locale} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Design status (narrow) */}
+        <section
+          className="animate-rise rounded-2xl border border-hairline bg-surface p-5 shadow-card"
+          style={{ animationDelay: "340ms" }}
+        >
+          <PanelHeader
+            title={t("designStatus", locale)}
+            href={`/merchant/designs?lang=${locale}`}
+            linkLabel={t("viewAllDesigns", locale)}
+            locale={locale}
+          />
+          {recentDesigns.length === 0 ? (
+            <EmptyRow>{t("emptyDesignsShort", locale)}</EmptyRow>
+          ) : (
+            <ul className="mt-3 divide-y divide-hairline">
+              {recentDesigns.map((d) => {
+                const flagged = d.placements.some((p) => p.status === "FLAGGED");
+                return (
+                  <li
+                    key={d.id}
+                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-ink">
+                        {d.name}
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-muted">
+                        {locale === "ar"
+                          ? d.productType.name_ar
+                          : d.productType.name_en}
+                      </div>
+                    </div>
+                    <Badge
+                      tone={d.orderable ? "ok" : flagged ? "warn" : "info"}
+                    >
+                      {d.orderable
+                        ? t("kpiOrderable", locale)
+                        : flagged
+                          ? t("kpiFlagged", locale)
+                          : t("kpiInProgress", locale)}
+                    </Badge>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
       </div>
+    </MerchantShell>
+  );
+}
+
+function KpiTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-xs font-semibold uppercase tracking-wide text-faint">
+      {children}
     </div>
   );
 }
 
-function LangToggle({ locale }: { locale: Locale }) {
-  const base = "rounded-md px-3 py-1.5 text-sm font-medium transition-colors";
-  const active = "bg-gray-900 text-white";
-  const inactive =
-    "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200";
+function StatRow({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "prod" | "info" | "ok" | "warn";
+}) {
+  const dot = {
+    prod: "bg-prod-fg",
+    info: "bg-info-fg",
+    ok: "bg-ok-fg",
+    warn: "bg-warn-fg",
+  }[tone];
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <dt className="flex items-center gap-2 text-muted">
+        <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+        {label}
+      </dt>
+      <dd className="font-mono font-semibold tabular-nums text-ink">{value}</dd>
+    </div>
+  );
+}
+
+function PanelHeader({
+  title,
+  href,
+  linkLabel,
+  locale,
+}: {
+  title: string;
+  href: string;
+  linkLabel: string;
+  locale: Locale;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="text-sm font-semibold text-ink">{title}</h2>
       <Link
-        href="/merchant?lang=en"
-        className={`${base} ${locale === "en" ? active : inactive}`}
+        href={href}
+        className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 transition-colors hover:text-brand-600"
       >
-        {t("langEN", locale)}
-      </Link>
-      <Link
-        href="/merchant?lang=ar"
-        className={`${base} ${locale === "ar" ? active : inactive}`}
-      >
-        {t("langAR", locale)}
+        {linkLabel}
+        <span aria-hidden className="rtl:rotate-180">
+          →
+        </span>
       </Link>
     </div>
   );
 }
 
-// Composite order status — color-grouped by lifecycle stage (mirrors /ops).
-function OrderStatusBadge({
-  status,
-  label,
-}: {
-  status: string;
-  label: string;
-}) {
-  const tone =
-    status === "CLOSED" || status === "DELIVERED"
-      ? "bg-green-100 text-green-800"
-      : status === "CANCELLED"
-        ? "bg-red-100 text-red-700"
-        : status.startsWith("PARTIALLY")
-          ? "bg-blue-100 text-blue-800"
-          : "bg-gray-100 text-gray-700";
+function EmptyRow({ children }: { children: React.ReactNode }) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}
-    >
-      {label}
-    </span>
+    <p className="mt-3 rounded-xl border border-dashed border-hairline-strong bg-canvas px-4 py-8 text-center text-sm text-muted">
+      {children}
+    </p>
   );
 }
 
-function FulfillmentStatusBadge({
-  status,
-  label,
-}: {
-  status: FulfillmentStatus;
-  label: string;
-}) {
-  const tone =
-    status === "CLOSED" || status === "DELIVERED"
-      ? "bg-green-100 text-green-800"
-      : status === "CANCELLED"
-        ? "bg-red-100 text-red-700"
-        : status === "SHIPPED"
-          ? "bg-blue-100 text-blue-800"
-          : status === "IN_PRODUCTION"
-            ? "bg-indigo-100 text-indigo-800"
-            : "bg-gray-100 text-gray-700";
+function AlertIcon() {
   return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden
+      className="shrink-0"
     >
-      {label}
-    </span>
+      <path
+        d="M8 1.5 15 14H1L8 1.5Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M8 6.5v3.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="8" cy="11.6" r="0.85" fill="currentColor" />
+    </svg>
   );
 }

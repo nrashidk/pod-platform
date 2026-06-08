@@ -12,7 +12,7 @@ import { createTopUpAction, type TopUpState } from "./actions";
 import { t, topUpErrorKey } from "./labels";
 
 const inputCls =
-  "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900";
+  "w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-brand-700 focus:outline-none focus:ring-1 focus:ring-brand-700";
 
 export function TopUpForm({ locale }: { locale: Locale }) {
   const [state, formAction, pending] = useActionState<TopUpState, FormData>(
@@ -29,13 +29,13 @@ export function TopUpForm({ locale }: { locale: Locale }) {
       {errorMsg && (
         <p
           role="alert"
-          className="rounded-md bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+          className="rounded-lg bg-danger-bg px-4 py-3 text-sm font-medium text-danger-fg"
         >
           {errorMsg}
         </p>
       )}
       <div>
-        <label htmlFor="topup-amount" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="topup-amount" className="block text-sm font-medium text-ink">
           {t("amountLabel", locale)}
         </label>
         <input
@@ -53,7 +53,7 @@ export function TopUpForm({ locale }: { locale: Locale }) {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+        className="inline-flex items-center rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-50"
       >
         {pending ? t("topUpPending", locale) : t("topUpButton", locale)}
       </button>

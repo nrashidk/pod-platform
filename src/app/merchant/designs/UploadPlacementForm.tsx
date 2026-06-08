@@ -138,29 +138,29 @@ export function UploadPlacementForm({
   return (
     <form onSubmit={handleSubmit} className="mt-2 space-y-2">
       {errorMsg && (
-        <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger-fg">
           <p className="font-medium">{errorMsg}</p>
           {/* The raw cause for an unexpected failure — surfaced so a future break
               says exactly what went wrong instead of hiding behind a catch-all. */}
           {state.errorKind === "generic" && state.errorDetail && (
-            <p className="mt-1 font-mono text-[11px] text-red-600 break-words">
+            <p className="mt-1 break-words font-mono text-[11px] text-danger-fg/80">
               {state.errorDetail}
             </p>
           )}
         </div>
       )}
       {progressMsg && (
-        <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+        <p className="rounded-lg bg-info-bg px-3 py-2 text-xs font-medium text-info-fg">
           {progressMsg}
         </p>
       )}
       {state.ok && state.status === "PASSED" && (
-        <p className="rounded-md bg-green-50 px-3 py-2 text-xs font-medium text-green-800">
+        <p className="rounded-lg bg-ok-bg px-3 py-2 text-xs font-medium text-ok-fg">
           {dt("uploadedPassed", locale)}
         </p>
       )}
       {state.ok && state.status === "FLAGGED" && (
-        <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn-fg">
           <p className="font-medium">{dt("uploadedFlagged", locale)}</p>
           {state.reasons && state.reasons.length > 0 && (
             <ul className="mt-1 list-disc space-y-1 ps-4">
@@ -179,12 +179,12 @@ export function UploadPlacementForm({
           name="file"
           accept="image/png,image/jpeg"
           required
-          className="block w-full max-w-xs text-xs text-gray-600 file:me-3 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-gray-800"
+          className="block w-full max-w-xs text-xs text-muted file:me-3 file:rounded-md file:border-0 file:bg-brand-700 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-brand-600"
         />
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+          className="inline-flex items-center rounded-lg border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-inset disabled:opacity-50"
         >
           {pending
             ? dt("uploadPending", locale)

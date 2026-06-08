@@ -10,7 +10,7 @@ import { createDesignAction, type CreateDesignState } from "./actions";
 import { dt, createErrorKey } from "./labels";
 
 const inputCls =
-  "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900";
+  "w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-brand-700 focus:outline-none focus:ring-1 focus:ring-brand-700";
 
 export function CreateDesignForm({
   locale,
@@ -35,19 +35,19 @@ export function CreateDesignForm({
   return (
     <form ref={formRef} action={formAction} className="space-y-3">
       {errorMsg && (
-        <p role="alert" className="rounded-md bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+        <p role="alert" className="rounded-lg bg-danger-bg px-4 py-3 text-sm font-medium text-danger-fg">
           {errorMsg}
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label htmlFor="design-name" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="design-name" className="block text-sm font-medium text-ink">
             {dt("nameLabel", locale)}
           </label>
           <input id="design-name" name="name" type="text" required className={`mt-1 ${inputCls}`} />
         </div>
         <div>
-          <label htmlFor="design-type" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="design-type" className="block text-sm font-medium text-ink">
             {dt("productTypeLabel", locale)}
           </label>
           <select id="design-type" name="productTypeId" required defaultValue="" className={`mt-1 ${inputCls}`}>
@@ -65,7 +65,7 @@ export function CreateDesignForm({
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+        className="inline-flex items-center rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-50"
       >
         {pending ? dt("createPending", locale) : dt("createButton", locale)}
       </button>

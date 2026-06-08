@@ -1,3 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* The merchant design system is applied per-surface (the merchant shell and the
+   login wrapper add `font-sans bg-canvas text-ink`), NOT globally — so internal
+   /ops and /printer surfaces keep Tailwind's plain defaults and stay untouched.
+   The font CSS variables live on <html> (root layout) and are inert until a
+   surface opts in via `font-sans`. */
+
+@layer utilities {
+  /* Staggered dashboard reveal. Cards set `animation-delay` inline; honor the
+     user's reduced-motion preference by collapsing the effect. */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-rise {
+      animation: none !important;
+    }
+  }
+}
