@@ -305,6 +305,6 @@ Still open:
 3. Order model (order → lines → fulfillments → shipments) + routing engine
 4. Money flow: gateway + fulfillment billing (gated by decision #1)
 5. Printer-facing fulfillment dashboard + status updates
-6. Delivery, dual-clock confirmation, defect/exception handling
+6. Delivery confirmation (proof of delivery starts the 30-day defect-claim window — the only clock; no buyer payment-release timer), defect/exception handling
 7. Admin + ops
 8. v1.1: first StoreConnection adapter (Shopify)
