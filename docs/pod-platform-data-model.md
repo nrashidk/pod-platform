@@ -141,7 +141,7 @@ Printful routes on capability → location → capacity. Because Printful owns a
 
 Per order:
 
-1. **Group lines by required capability.** Lines needing the same capability (product_type + method) stay together. Lines needing different capabilities (e.g. shirt + mug) are separated — this is the *only* reason an order splits. Quantity is never divided across printers; 10 identical shirts go to one printer, not spread across five.
+1. **Group lines by required capability.** Lines needing the same capability (product_type + method) stay together. Lines needing different capabilities (e.g. shirt + mug) are separated. **Quantity is not divided across printers — with one exception: capacity overflow** (owner ruling P3, tier 3). 10 identical shirts go to one printer, not spread across five, *unless no single eligible printer can produce all 10*; only then is the line's quantity split across as few eligible printers as needed. Each resulting part is its own Fulfillment — still the unit of liability, shipping, tracking and claims for its parcel — and is judged for bulk (≥ AED 1,000) on its own production cost. An order therefore splits into several Fulfillments/parcels for exactly three reasons: (a) products no single printer makes, (b) tier-2 rotation of whole lines across tied printers, (c) tier-3 capacity overflow.
 
 2. **Filter to eligible printers** (the capability gate). For each capability group, keep only printers whose active PrinterCapability matches product_type + method + can meet quantity. If none → order can't be fulfilled (block at checkout / flag).
 
@@ -156,9 +156,12 @@ Per order:
 
    *Watch:* cost-first concentrates volume on the cheapest printer → deepens single-printer dependency (already a risk with only two printers). As the network grows, add a small load-balancing factor so neglected printers don't drop you. Do not solve in v1; note it.
 
-4. **Assign** each capability group to its top-ranked printer → one Fulfillment per chosen printer. One printer may take multiple groups if it's eligible for all of them (avoids unnecessary splits — fewer parcels, fewer shipping fees, fewer defect surfaces).
+4. **Assign** — three tiers (owner ruling P3):
+   1. **Default:** each line goes whole to its top-ranked printer → one Fulfillment per chosen printer. One printer may take multiple groups if it's eligible for all of them (avoids unnecessary splits — fewer parcels, fewer shipping fees, fewer defect surfaces). One eligible printer → it gets 100%.
+   2. **Fairness:** when eligible printers are tied (same capability, same price, capacity available), rotate **whole lines** across them. A line is never split in this tier.
+   3. **Capacity overflow:** only when no single eligible printer can produce a line's full quantity, split that line's quantity across eligible printers (the one exception in step 1).
 
-> Net rule: **capability gate → rank eligible printers by cost + proximity + capacity → assign.** Same skeleton as Printful, with cost added because your printers are independent.
+> Net rule: **capability gate → rank eligible printers by cost + proximity + capacity → assign (whole lines; rotate on ties; split quantity only on capacity overflow).** Same skeleton as Printful, with cost added because your printers are independent.
 
 ---
 
@@ -270,10 +273,7 @@ Pricing is a stack of components, not a single price. Buyer/merchant pays the su
 - **Possible later:** merchant subscription tier lowering wholesale (Printful's Growth plan = $24.99/mo, free at $12K/yr sales, up to 33% off).
 
 ### Split-shipping rule (the margin leak to close)
-If one order splits across two printers, you have **two parcels and potentially two shipping costs**, but Printful's same-category bundling assumes same-facility consolidation. Cross-printer splits can cost more shipping than a single quote implies. Decision:
-- **Recommended:** compute shipping per Fulfillment and show it at checkout ("ships in 2 parcels"). Buyer sees real cost; no leak.
-- Alternative: quote one blended rate and absorb the difference (simpler UX, eats margin on splits).
-Pick before checkout is built.
+If one order splits across two printers, you have **two parcels and potentially two shipping costs**, but Printful's same-category bundling assumes same-facility consolidation. Cross-printer splits can cost more shipping than a single quote implies. **Decided (owner rulings P2 + P17):** the buyer is always charged **ONE blended shipping rate for the whole order**, never per parcel — whatever the cause of the split: (a) products no single printer makes, (b) tier-2 rotation across tied printers, (c) tier-3 capacity overflow (§3). The platform absorbs the true multi-parcel cost internally. The rate's *value* is a pricing-calibration matter tied to the deferred pricing stack (owner ruling P7); until then it is one configurable placeholder.
 
 ---
 
@@ -285,16 +285,19 @@ Pick before checkout is built.
 
 ---
 
-## 9. Open decisions still gating build
+## 9. Open decisions
 
 **Resolved this session:** money model = pure Printful, single flow, **platform never holds buyer funds even on own store (Reading B)**. Clock A / escrow removed permanently. Pricing = stacked model. Split orders contained via Fulfillment. Routing = capability gate → capacity gate → cost (primary) → proximity (tiebreaker). **Printer protection:** prevention (print-file validation + mandatory first-article on bulk) + 70/30 retention on bulk (Fulfillment ≥ AED 1,000), 30% released on delivery+claim-window-closed event, per-order; running-account netting fallback; removal-from-network discipline; enforcement scales with printer count.
 
 Still open:
-1. **License + gateway for operating a store and billing fulfillment** — you are NOT a custodian of consumer funds (lighter position), but you still need the right UAE entity and a payment gateway to run a store and charge for fulfillment. Architectural answer needed before checkout. Gates build step 4. (You're handling license research.)
-2. **Split-shipping rule** — per-Fulfillment shipping shown at checkout (recommended) vs blended-and-absorb. Gates checkout.
-3. **Routing weights** — starting weights for cost vs proximity vs capacity.
+
+> **Update 28 Sep 2026:** items 1, 2, 3 and 5 have been ruled by the owner (`docs/build/decisions.md`: P1, P2 + P17, P3, P5). Only item 4 remains open, and it gates nothing in the build. No item below blocks build work.
+
+1. **License + gateway for operating a store and billing fulfillment** — *resolved (P1):* you are NOT a custodian of consumer funds (lighter position), but you still need the right UAE entity and a payment gateway to run a store and charge for fulfillment. These gate **go-live only**, not the build: checkout and billing (build step 4) are built now against **Stripe test mode**, behind the provider seam, and the final gateway is confirmed before launch. (You're handling license research.)
+2. **Split-shipping rule** — *resolved (P2, P17):* one blended rate for the whole order, never per-parcel, in every multi-parcel case (§7).
+3. **Routing weights** — *resolved (P3):* three tiers — whole line to one printer; rotate whole lines on ties; split quantity only on capacity overflow (§3).
 4. **Printer count** — two is pilot-only; the reroute branch (§5) is hollow until a 3rd/4th capable printer exists *per product category*.
-5. **Design ownership** (flagged, not v1-blocking) — when a buyer's design on your OWN_STORE becomes a merchant's sellable product on a connected store, whose design is it and who may reuse it. Resolve before v1.1.
+5. **Design ownership** — *resolved (P5):* designs stay merchant-scoped in code (no cross-merchant sharing); who owns / may reuse a buyer's design once it becomes a merchant's product is a terms-and-conditions matter settled pre-launch. It does not block v1.1 (Shopify adapter).
 
 ---
 
@@ -303,7 +306,7 @@ Still open:
 1. Catalog + ProductType + PrinterCapability matrix (routing foundation)
 2. Design tool: mockup generator **+ print-file spec validation** (the two-file pipeline)
 3. Order model (order → lines → fulfillments → shipments) + routing engine
-4. Money flow: gateway + fulfillment billing (gated by decision #1)
+4. Money flow: gateway + fulfillment billing (built in Stripe test mode; decision #1 gates go-live only — P1)
 5. Printer-facing fulfillment dashboard + status updates
 6. Delivery confirmation (proof of delivery starts the 30-day defect-claim window — the only clock; no buyer payment-release timer), defect/exception handling
 7. Admin + ops
