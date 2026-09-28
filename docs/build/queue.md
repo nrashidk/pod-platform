@@ -1,7 +1,7 @@
 # POD Builder — Queue
 
 Take the first item with status `todo` whose `after` items are all `done`.
-Skip anything `blocked — owner decision` or `parked`. One item = one PR; if an
+Skip anything `blocked — owner decision`, `deferred` or `parked`. One item = one PR; if an
 item turns out too big, split it into lettered sub-items here (in the same PR)
 and build only the first. When an item's PR merges, its line reads
 `done (PR #n)` — updated in that same PR before merge.
@@ -9,7 +9,8 @@ and build only the first. When an item's PR merges, its line reads
 Sources: **DM** = `docs/pod-platform-data-model.md` (§ = section);
 **PP** = `PRE-PRODUCTION.md` (item number); **recon** = the builder-foundation
 recon of 28 Sep 2026 (read the code, not commit messages — findings below).
-`blocked` items name the `parked.md` entry that unblocks them.
+`blocked` items name the `parked.md` entry that unblocks them; `P<n>` in the
+Source column means an owner ruling recorded in `decisions.md`.
 
 ## Where things stand (recon, 28 Sep 2026)
 
@@ -57,7 +58,7 @@ Built and covered by smoke tests (verified by reading the code):
 | 4 | **First-article approval flow (bulk).** Ops action: ROUTED → FIRST_ARTICLE_PENDING (printer produced 1 unit) → FIRST_ARTICLE_APPROVED or back to production; FIRST_ARTICLE_APPROVED → IN_PRODUCTION allowed. Bulk fulfillments must pass it before IN_PRODUCTION (already enforced) — this adds the missing path through. Smoke test without direct DB writes. | DM §5b | — | todo |
 | 4b | First-article **photo proof**: printer uploads a photo of the first unit (existing Blob store seam; stub in tests); ops sees it when approving. | DM §5b | 4 | todo |
 | 5 | **Capacity gate becomes real.** Maintain `current_load_units` (add on routing, release on SHIPPED/CANCELLED/REROUTED) inside the same transaction as the state change; smoke test that a full printer drops out of routing. Log the load-release rule in decisions.md. | DM §3 step 3.2; recon | — | todo |
-| 6 | **Route per capability group, not per line.** Group lines by (product type + method), check min/max qty and capacity on the group total, assign each group whole to one printer. | DM §3 step 1–2 | 5 | todo |
+| 6 | **Routing tier 1 — whole line to one printer.** Group lines by (product type + method); check min/max qty and capacity on the group total; assign each line whole to ONE eligible printer (cost first, proximity tiebreak). Only one eligible printer → it gets 100%. | DM §3 step 1–2; P3 | 5 | todo |
 | 7 | **Shipment on dispatch.** Printer enters carrier + tracking number when marking SHIPPED; Shipment row created then (not only at DELIVERED); shown to ops and merchant. | DM §3, §4 | — | todo |
 | 8 | **Printer work view.** Printer sees, per fulfillment: the validated print file(s) (short-lived private URL), ship-to address, and the brand to apply. Ownership-scoped. | DM §4, §6; recon | 7 | todo |
 | 9 | **White-label packing slip.** Bilingual printable packing slip per fulfillment carrying the merchant's brand (logo, message, return address), no platform/printer branding. | DM §6 | 8 | todo |
@@ -65,7 +66,7 @@ Built and covered by smoke tests (verified by reading the code):
 | 11 | **Proof of delivery.** Record POD (photo/reference) when marking DELIVERED; delivery starts the 30-day claim window (already computed). | DM §3, §4 | 7 | todo |
 | 12 | **Estimated delivery.** Add `Printer.production_lead_days` (default, additive migration) + a per-destination shipping-days table with defaults; set `Fulfillment.estimated_delivery` at routing; show it. | DM §1 Printer, §4 | 5 | todo |
 | 13 | **Bleed check** in print-file validation (`PrintArea.bleed_mm`), with bilingual merchant-facing flag copy. | DM §2 | — | todo |
-| 14 | **Mockup generator.** Render a preview mockup from a design's validated print file onto a per-product-type template (placeholder test templates; real product photos are an owner input — see parked.md). Uses `sharp` (already a dependency). Stores `mockup_url`. | DM §2, §10 step 2 | 13 | todo |
+| 14 | **Mockup generator.** Render a preview mockup from a design's validated print file onto a per-product-type template (clearly-labelled `[PLACEHOLDER]` product images — owner ruling P12; real photos arrive pre-launch). Uses `sharp` (already a dependency). Stores `mockup_url`. | DM §2, §10 step 2 | 13 | todo |
 | 14b | **Mockup approval + lock.** Merchant approves the mockup (timestamped `mockup_approved_at`); approved design's print files become immutable (new version needed to change). | DM §2, §4 | 14 | todo |
 | 14c | **Order gate on approval.** An order line needs mockup approved AND print files PASSED (ops entry + API intake). Existing API behaviour change → note in PR. | DM §2 rule, §4 | 14b | todo |
 | 15 | **Embroidery digitization step.** For `requires_digitization` capabilities: DIGITIZING state, stitch-file upload + digitization preview, preview becomes the approval artifact for that line. | DM §2 embroidery | 14b, 4 | todo |
@@ -87,9 +88,12 @@ Built and covered by smoke tests (verified by reading the code):
 | 25 | **PP 1 — gate dev trusted origins** behind `NODE_ENV !== "production"`; production origin comes only from `BETTER_AUTH_URL`. (Setting the real domain/secret is owner-only — parked.md.) | PP 1 | — | todo |
 | 26 | **PP 4 — seed guards.** `seed-auth`/`seed-ops-demo`/`seed.mjs` refuse to run when `NODE_ENV=production` or the database host is not local, unless an explicit override flag is set. | PP 4 | — | todo |
 | 27 | **README refresh** — it still describes an empty skeleton; describe what exists, how to run locally against a local Postgres, and point to docs/build/. | recon | — | todo |
-| 28 | **Buyer checkout / payment gateway.** | DM §4, §10 step 4 | parked P1 | blocked — owner decision |
-| 29 | **Split-shipping pricing at checkout.** | DM §7 | 28, parked P2 | blocked — owner decision |
-| 30 | **Pricing stack** (shipping, add-ons, VAT, tiers) replacing the flat 30% markup in billing. | DM §7 | parked P1, P7 | blocked — owner decision |
-| 31 | **Wallet enforcement / auto-recharge** (block or auto-charge when balance is short). | DM §0, §1 Wallet | parked P1, P8 | blocked — owner decision |
-| 32 | **Routing weights / load-balancing factor** beyond cost-then-proximity. | DM §3, §9.3 | parked P3 | blocked — owner decision |
-| 33 | **Shopify adapter (v1.1).** StoreConnection, webhook → `createOrder`, product push. | DM §8, §10 step 8 | parked P5 | blocked — owner decision |
+| 28 | **Buyer checkout — Stripe TEST MODE ONLY**, behind the provider seam; no live-key path (P1). Buyer pays the store's gateway, never the platform. Likely needs a minimal own-store storefront first — split into lettered sub-items when started. | DM §4, §10 step 4; P1 | 2, 3, 14c | todo |
+| 29 | **One blended shipping rate at checkout** (never per-parcel), incl. orders split on capacity overflow (P2). Rate = one configurable constant with a placeholder value; owner sets the real rate pre-launch (PRE-PRODUCTION 15). See parked P17 (non-blocking). | DM §7; P2 | 28 | todo |
+| 30 | **Pricing stack** (shipping, add-ons, VAT, tiers) replacing the flat 30% markup. | DM §7; P7 | — | deferred — owner ruling P7 keeps flat 30% (`MERCHANT_MARKUP_PCT`, single constant) |
+| 31 | **`Wallet.credit_limit` field** — nullable, default `null` = unlimited; additive migration; **no behaviour change** (orders are never blocked on balance). Smoke test that billing still runs past zero. | P8 | 1 | todo |
+| 31b | **Wallet limit enforcement / auto-recharge.** | DM §0, §1 Wallet; P8 | 31 | deferred — owner ruling P8 (its own later phase) |
+| 32 | **Routing tiers 2 + 3.** Tier 2: when eligible printers are tied (same capability, same price, capacity available), rotate whole lines across them — never split a line (persisted rotation pointer). Tier 3: split a line's quantity across printers ONLY when no single eligible printer can make the full quantity (capacity overflow); each part becomes its own Fulfillment and is judged for bulk (≥ AED 1,000) on its own cost. Log rotation-scope choice per parked P17. | P3 (supersedes DM §3 "never divided" for overflow only) | 6 | todo |
+| 33 | **Shopify adapter (v1.1).** StoreConnection, webhook → `createOrder`, product push; designs stay merchant-scoped (P5). Built and tested with signed fixture webhooks only — connecting a real Shopify store needs the owner's Shopify app credentials (a go-live step, `needs-human` if it requires a secret). | DM §8, §10 step 8; P5 | 23 | todo |
+| 34 | **Holdback refusers excluded from bulk.** A printer with `accepts_bulk_holdback = false` is not eligible for a line whose production cost with that printer is ≥ AED 1,000; still eligible below it. Smoke test both sides of the threshold. | DM §5b; P9 | 6 | todo |
+| 35 | **Signed contract required for routing.** `contract_signed = true` becomes a hard eligibility gate (like `blind_ship_confirmed`); TEST seed printers marked signed; smoke test that an unsigned printer is never routed to. | DM §5b; P15 | — | todo |

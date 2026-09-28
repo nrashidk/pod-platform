@@ -40,21 +40,24 @@ a production database.
 
 ## Business & Compliance
 
-### 5. Resolve UAE business license / payment gateway before checkout
-Per the project constraints, the money/checkout phase is **blocked** until the
-UAE entity and payment gateway question is resolved. The platform never holds
-buyer funds — the buyer pays the store's gateway — so the correct legal entity
-and gateway must be confirmed before any checkout flow ships.
+### 5. UAE business license / entity + final payment gateway — GO-LIVE gate
+Owner ruling 28 Sep 2026 (P1, `docs/build/decisions.md`): this is a **go-live
+gate, not a build gate**. The build — including checkout — uses **Stripe in
+test mode only**, behind the provider seam (`src/lib/payments/index.ts`); there
+is no live-key path in the code. The platform never holds buyer funds — the
+buyer pays the store's gateway.
 
 - [ ] Confirm the UAE business license / entity.
-- [ ] Confirm the payment gateway.
-- [ ] Only then build and enable the checkout/payment phase.
+- [ ] Confirm the final payment gateway (keep Stripe, or swap the provider at
+      the `src/lib/payments/index.ts` seam).
+- [ ] Only then put any checkout or top-up rail into live mode (item 7).
 
 ### 7. Stripe wallet top-ups — go live (keys + webhook registration)
 The merchant→platform wallet top-up rail (`src/lib/payments/`) ships in **test
 mode**. Before launch it must be switched to live mode. This is the money-in
 rail (merchants funding their own prepaid wallet); it does **not** touch the
-buyer→store gateway, which remains blocked under item 5.
+buyer→store gateway. Kept by owner ruling P6 (28 Sep 2026); live mode only
+after item 5.
 
 - [ ] Replace the test `STRIPE_SECRET_KEY` (`sk_test_…`) with the live key
       (`sk_live_…`) in the production secret manager — never in the repo.
@@ -70,6 +73,50 @@ buyer→store gateway, which remains blocked under item 5.
 - [ ] Confirm this rail is permitted under the resolved UAE entity/gateway
       decision (item 5) — or swap `StripeProvider` for the chosen UAE gateway at
       the `src/lib/payments/index.ts` seam.
+
+### 8. Vercel Blob token for print files
+- [ ] Create the production Blob store and set `BLOB_READ_WRITE_TOKEN` in the
+      Vercel production environment (never in the repo). Tests use an
+      in-memory stub and never need it.
+
+## Content, Contracts & Operations
+
+Owner actions before launch that came out of the 28 Sep 2026 rulings
+(`docs/build/decisions.md`). None of them block the build.
+
+### 9. Enter the real printers through the ops screens (P11)
+- [ ] Enter each real printer (and its capabilities and prices) in production
+      through the ops printer screens. **Never** commit real printer data to
+      the repository or the seed.
+
+### 10. Real product photos (P12)
+- [ ] Supply real product photos for mockups, to replace the clearly-labelled
+      `[PLACEHOLDER]` images the build uses.
+
+### 11. Terms & conditions — design ownership (P5)
+- [ ] Write the T&C wording for who owns / may reuse a buyer's design when it
+      becomes a merchant's product. The code already keeps designs
+      merchant-scoped with no cross-merchant sharing.
+
+### 12. Signed printer contracts (P15)
+- [ ] Sign a contract with each printer covering the data model §5b terms
+      (defect = printer's cost, 70/30 holdback on bulk, netting, first-article
+      approval, removal from network).
+- [ ] Mark `contract_signed` (and `accepts_bulk_holdback` where agreed) on the
+      printer in the ops screens — routing ignores unsigned printers, and
+      printers that refuse the holdback get no bulk work.
+
+### 13. Arabic copy review (P16)
+- [ ] Have an Arabic speaker review all Arabic UI copy (the builder's Arabic is
+      marked "machine-drafted" in each PR).
+
+### 14. Printer count per product category (P4 — still open)
+- [ ] Aim for a 3rd and 4th capable printer per product category; with two,
+      rerouting and "remove a bad printer" have no teeth.
+
+### 15. The blended shipping rate (P2)
+- [ ] Set the real blended shipping rate. The build ships with one
+      configurable placeholder constant (queue item 29).
 
 ## Build & Deployment
 

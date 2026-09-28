@@ -25,7 +25,8 @@ around them. Interactive sessions ask; autonomous runs park it
 - **Interactive owner sessions** may still work step by step: do the single
   task asked, confirm before moving to a new phase or widening scope, and ask
   before installing dependencies, changing config, or doing anything
-  destructive. Record any ruling the owner gives in `charter.md` §5.
+  destructive. Record any ruling the owner gives in `docs/build/decisions.md`
+  ("Owner rulings") and summarise it in `charter.md` §5.
 - Either way: small, reviewable PRs; never push to `main`; tests run against a
   local Postgres only, never Neon.
 
@@ -38,11 +39,13 @@ around them. Interactive sessions ask; autonomous runs park it
 ## Build order (from docs §10 — do not skip ahead)
 Live status and the split into PR-sized items: `docs/build/queue.md`.
 1. Scaffold Next.js + Prisma + Neon connection (skeleton only).
-2. Apply the foundation schema; run first migration; seed the two real printers.
+2. Apply the foundation schema; run first migration; seed TEST printers only
+   (real printers are entered via ops screens, never committed — owner ruling P11).
 3. Verify capability-matrix queries: given a product + method, return eligible printers.
 4. (Next, once specced) Order → Fulfillment → Shipment layer + routing engine.
-5. Money/checkout — **BLOCKED until the UAE license/gateway question is resolved.**
-   Do not build the payment phase until I confirm the entity and gateway.
+5. Money/checkout — may be built in **Stripe TEST MODE ONLY**, behind the
+   provider seam; no live-key path. The UAE licence + final gateway are a
+   go-live gate, not a build gate (owner ruling P1, `docs/build/decisions.md`).
 
 ## Money model reminders (so you don't reintroduce removed ideas)
 - Platform NEVER holds buyer funds (no escrow). Buyer pays the store's gateway.

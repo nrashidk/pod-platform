@@ -47,13 +47,15 @@ what he needs to do (if anything).
    must render correctly with `dir="rtl"`. A UI PR without Arabic is not done.
    Arabic copy the builder writes is marked in the PR body as "machine-drafted,
    owner to review" — it is not blocked on review.
-10. **Never contradict `docs/pod-platform-data-model.md`.** In particular:
+10. **Never contradict `docs/pod-platform-data-model.md`**, except where an
+    owner ruling (§5 / `decisions.md`) explicitly supersedes a point — today
+    only one: owner ruling P3 allows splitting a line's quantity across
+    printers **on capacity overflow only** (data model §3 step 1 otherwise
+    still applies). In particular:
     - The platform **never holds buyer funds**. No escrow, no buyer money in
       platform accounts. The buyer pays the store's gateway.
     - **No "Clock A"** — no buyer payment-release / validation timer. It was
-      removed on purpose. (Data model §10 step 6 still says "dual-clock
-      confirmation"; that wording is stale — see `parked.md`. Build only the
-      single defect-claim window.)
+      removed on purpose. Only the 30-day defect-claim window exists.
     - Printers are paid **by** the platform; they never pay the platform.
     - **70/30 retention applies only to bulk** — a Fulfillment whose production
       (wholesale) cost is **≥ AED 1,000**. 70% on dispatch, 30% released only
@@ -61,10 +63,13 @@ what he needs to do (if anything).
       claim*, never on a timer from order or dispatch. Per order, never batched.
     - Mandatory first-article approval before a bulk run.
     If a queue item seems to need any of these changed, park it.
-11. **Money/checkout (data model §10 step 4) is blocked** until the owner
-    rules on the UAE license + gateway (`parked.md`). Do not build buyer
-    checkout, a buyer payment gateway, or anything marked
-    `blocked — owner decision` in the queue.
+11. **Payments are Stripe TEST MODE ONLY** (owner ruling P1). Money/checkout
+    work may be built, always behind the provider seam
+    (`src/lib/payments/index.ts`). Never add a live-key path, a live-mode
+    switch, or code that behaves differently for `sk_live_` keys. The UAE
+    licence and final gateway are a go-live gate (`PRE-PRODUCTION.md` 5).
+    Do not build anything marked `blocked — owner decision` or `deferred` in
+    the queue.
 12. **`needs-human`, never merged by the builder:**
     - any migration that rewrites, deletes or backfills **existing** rows
       (adding tables/columns/enums with defaults is fine; transforming data
@@ -133,29 +138,39 @@ body and rely on CI for that step — never mark a step passed that did not run.
 
 ## 5. Rulings (settled by the owner — do not reopen)
 
-Format — one entry per ruling, newest last, never edited after the fact
-(a later ruling supersedes an earlier one by saying so):
+Owner rulings are recorded in full in `docs/build/decisions.md` under
+"Owner rulings" (one entry per ruling, newest last, never edited after the
+fact; a later ruling supersedes an earlier one by saying so). Each entry gives
+the ruling, its source, and the queue items / parked entries it affects. This
+section lists them in summary and is binding together with that file.
 
-```
-### <topic>
-- Owner ruling, <D Mon YYYY> (<short name>): <the ruling, in full>.
-  Source: <issue/PR comment link or "session with owner">.
-  Affects: queue item(s) <n>; parked entry <…> (now resolved).
-```
-
-How a ruling gets here: the owner answers a `parked.md` question (in a PR
+How a ruling gets recorded: the owner answers a `parked.md` question (in a PR
 comment, on the status issue, or in an interactive session). The next run (or
-the interactive session) copies his answer verbatim-in-substance into this
-section, marks the parked entry resolved, unblocks the queue items it names,
-and logs the change on the status issue. The builder never writes a ruling the
-owner did not give.
+the interactive session) records his answer verbatim-in-substance in
+`decisions.md`, adds a one-line summary here, marks the parked entry resolved,
+unblocks the queue items it names, and logs the change on the status issue.
+The builder never writes a ruling the owner did not give.
+
+### Owner rulings of 28 Sep 2026 (P1–P16)
+- Recorded in full in `docs/build/decisions.md` → "Owner rulings". They are
+  binding exactly as if written here. Summary: Stripe test-mode only, licence
+  = go-live gate (P1); one blended shipping rate (P2); three-tier routing —
+  whole line to one printer, rotate whole lines across tied printers, split
+  quantity only on capacity overflow (P3); designs merchant-scoped (P5); keep
+  Stripe top-ups (P6); keep flat 30% markup, stacked pricing deferred (P7);
+  allow wallet debt + nullable `credit_limit` field, no enforcement yet (P8);
+  holdback refusers excluded from bulk routing (P9); real printers only via
+  ops screens (P11); placeholder product photos (P12); `contract_signed`
+  required for routing (P15); owner reviews Arabic pre-launch (P16).
 
 ### Standing rulings (from CLAUDE.md and the data model, pre-dating this charter)
 - Money model: pure Printful, one flow, platform never holds buyer funds
   (data model §0, §9 "Resolved").
 - Clock A / escrow / buyer payment-release timer: permanently removed.
 - Routing: capability gate → capacity gate → cost (primary) → proximity
-  (tiebreaker); quantity never split across printers (data model §3).
+  (tiebreaker); quantity never split across printers (data model §3) —
+  **amended by owner ruling P3** (tie rotation; split only on capacity
+  overflow).
 - Printer protection: print-file validation + mandatory first-article on bulk
   + 70/30 retention on bulk (Fulfillment ≥ AED 1,000), 30% released on
   delivery + claim-window-closed event, per order; netting fallback; removal
