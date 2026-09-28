@@ -285,19 +285,19 @@ If one order splits across two printers, you have **two parcels and potentially 
 
 ---
 
-## 9. Open decisions still gating build
+## 9. Open decisions
 
 **Resolved this session:** money model = pure Printful, single flow, **platform never holds buyer funds even on own store (Reading B)**. Clock A / escrow removed permanently. Pricing = stacked model. Split orders contained via Fulfillment. Routing = capability gate → capacity gate → cost (primary) → proximity (tiebreaker). **Printer protection:** prevention (print-file validation + mandatory first-article on bulk) + 70/30 retention on bulk (Fulfillment ≥ AED 1,000), 30% released on delivery+claim-window-closed event, per-order; running-account netting fallback; removal-from-network discipline; enforcement scales with printer count.
 
 Still open:
 
-> **Update 28 Sep 2026:** items 1, 2, 3 and 5 have been ruled by the owner (`docs/build/decisions.md`: P1, P2 + P17, P3, P5). Only item 4 remains open. Items 2 and 3 are restated below; items 1 and 5 are kept as written for history — their rulings: licence + gateway is a go-live gate and the build is Stripe test-mode only (P1); designs stay merchant-scoped, reuse wording is a T&C matter (P5).
+> **Update 28 Sep 2026:** items 1, 2, 3 and 5 have been ruled by the owner (`docs/build/decisions.md`: P1, P2 + P17, P3, P5). Only item 4 remains open, and it gates nothing in the build. No item below blocks build work.
 
-1. **License + gateway for operating a store and billing fulfillment** — you are NOT a custodian of consumer funds (lighter position), but you still need the right UAE entity and a payment gateway to run a store and charge for fulfillment. Architectural answer needed before checkout. Gates build step 4. (You're handling license research.)
+1. **License + gateway for operating a store and billing fulfillment** — *resolved (P1):* you are NOT a custodian of consumer funds (lighter position), but you still need the right UAE entity and a payment gateway to run a store and charge for fulfillment. These gate **go-live only**, not the build: checkout and billing (build step 4) are built now against **Stripe test mode**, behind the provider seam, and the final gateway is confirmed before launch. (You're handling license research.)
 2. **Split-shipping rule** — *resolved (P2, P17):* one blended rate for the whole order, never per-parcel, in every multi-parcel case (§7).
 3. **Routing weights** — *resolved (P3):* three tiers — whole line to one printer; rotate whole lines on ties; split quantity only on capacity overflow (§3).
 4. **Printer count** — two is pilot-only; the reroute branch (§5) is hollow until a 3rd/4th capable printer exists *per product category*.
-5. **Design ownership** (flagged, not v1-blocking) — when a buyer's design on your OWN_STORE becomes a merchant's sellable product on a connected store, whose design is it and who may reuse it. Resolve before v1.1.
+5. **Design ownership** — *resolved (P5):* designs stay merchant-scoped in code (no cross-merchant sharing); who owns / may reuse a buyer's design once it becomes a merchant's product is a terms-and-conditions matter settled pre-launch. It does not block v1.1 (Shopify adapter).
 
 ---
 
@@ -306,7 +306,7 @@ Still open:
 1. Catalog + ProductType + PrinterCapability matrix (routing foundation)
 2. Design tool: mockup generator **+ print-file spec validation** (the two-file pipeline)
 3. Order model (order → lines → fulfillments → shipments) + routing engine
-4. Money flow: gateway + fulfillment billing (gated by decision #1)
+4. Money flow: gateway + fulfillment billing (built in Stripe test mode; decision #1 gates go-live only — P1)
 5. Printer-facing fulfillment dashboard + status updates
 6. Delivery confirmation (proof of delivery starts the 30-day defect-claim window — the only clock; no buyer payment-release timer), defect/exception handling
 7. Admin + ops
