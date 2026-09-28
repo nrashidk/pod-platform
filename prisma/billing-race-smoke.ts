@@ -203,24 +203,40 @@ async function main() {
     round2(Number(finalWallet.balance)) === expectedFinal
   );
 
-  // Replay the full ledger in creation order from the starting balance and
-  // confirm every recorded balance_after is internally consistent — proving
-  // no write vanished, whichever order the two concurrent transactions
-  // actually committed in.
+  // Confirm the ledger is internally consistent with SOME valid write order —
+  // proving no write vanished, whichever order the two concurrent
+  // transactions actually committed in. NOT ordered by `createdAt`: both
+  // billing-side rows are written inside the SAME `$transaction`, and
+  // Postgres's `now()`/CURRENT_TIMESTAMP is the transaction's start time, so
+  // those two rows are guaranteed to tie on `createdAt` — a tie SQL doesn't
+  // break deterministically. Instead, try every permutation of the 3 rows
+  // and require at least one whose sequential replay from STARTING_BALANCE
+  // reproduces every recorded balance_after exactly.
   const txns = await prisma.walletTransaction.findMany({
     where: { walletId: wallet.id },
-    orderBy: { createdAt: "asc" },
   });
   check("exactly 3 WalletTransactions (2 charges + 1 topup)", txns.length === 3);
-  let running = STARTING_BALANCE;
-  let replayOk = true;
-  for (const t of txns) {
-    running = round2(running + Number(t.amount));
-    if (running !== round2(Number(t.balance_after))) replayOk = false;
+  const rows = txns.map((t) => ({
+    amount: Number(t.amount),
+    balance_after: round2(Number(t.balance_after)),
+  }));
+  function permutations<T>(arr: T[]): T[][] {
+    if (arr.length <= 1) return [arr];
+    return arr.flatMap((item, i) =>
+      permutations([...arr.slice(0, i), ...arr.slice(i + 1)]).map((rest) => [item, ...rest])
+    );
   }
+  const replayOk = permutations(rows).some((perm) => {
+    let running = STARTING_BALANCE;
+    for (const r of perm) {
+      running = round2(running + r.amount);
+      if (running !== r.balance_after) return false;
+    }
+    return running === round2(Number(finalWallet.balance));
+  });
   check(
-    `ledger replays consistently: running total after all txns (${running}) === final wallet balance (${Number(finalWallet.balance)})`,
-    replayOk && running === round2(Number(finalWallet.balance))
+    "ledger is internally consistent: some valid write order replays every recorded balance_after exactly, ending at the final wallet balance",
+    replayOk
   );
 
   await cleanup();

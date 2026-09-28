@@ -154,7 +154,7 @@ export async function recordOrderBilling(orderId: string): Promise<OrderBilling>
       // straight off the row the update returns.
       const updated = await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: { decrement: l.merchant_owed } },
+        data: { balance: { decrement: l.merchant_owed.toFixed(2) } },
       });
       await tx.walletTransaction.create({
         data: {

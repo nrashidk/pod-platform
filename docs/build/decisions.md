@@ -175,5 +175,9 @@ PR "Align data model with P3; resolve P17".
   database), then assert the final balance is exactly
   `start + topup − charged` and replay every `WalletTransaction.balance_after`
   against the starting balance (simplest way to prove no update was lost,
-  reversible, matches the existing wallet-topup-smoke.ts style) · PR
-  (pending)
+  reversible, matches the existing wallet-topup-smoke.ts style); fresh-eyes
+  review then flagged that `createdAt` ties (both billing-side rows share one
+  `$transaction`, so Postgres's `now()` gives them the identical timestamp)
+  made an order-by-`createdAt` replay unreliable → replaced with a
+  permutation search that accepts any write order whose sequential replay
+  reproduces every recorded `balance_after` · PR #6
