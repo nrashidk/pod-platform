@@ -2,22 +2,19 @@
 
 // Server Action behind the operator new-order form. INDEPENDENT auth re-check
 // (requireRole — a forged POST must be rejected here, never assume the page
-// gated it), then: parse → validate → call the EXISTING createOrderWithRouting
-// (routing/splitting unchanged) → recordOrderBilling (record-only ledger) →
-// redirect to /ops/billing. UnroutableLineError (and validation failures) are
-// returned as a friendly { errorKind } for the form to localize — never a crash.
+// gated it), then: parse → validate → call the EXISTING
+// createOrderWithRoutingAndBilling (routing/splitting unchanged; routes AND
+// records the record-only ledger in one transaction, queue item 2) → redirect
+// to /ops/billing. UnroutableLineError (and validation failures) are returned
+// as a friendly { errorKind } for the form to localize — never a crash.
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { PrintMethod } from "@prisma/client";
 import { requireRole } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import {
-  createOrderWithRouting,
-  UnroutableLineError,
-  type CreateOrderLineInput,
-} from "@/lib/orders";
-import { recordOrderBilling } from "@/lib/billing";
+import { UnroutableLineError, type CreateOrderLineInput } from "@/lib/orders";
+import { createOrderWithRoutingAndBilling } from "@/lib/billing";
 import { isDesignOrderable } from "@/lib/designs";
 
 export interface NewOrderState {
@@ -137,13 +134,11 @@ export async function createOrderAction(
 
   let orderId: string;
   try {
-    const order = await createOrderWithRouting({
+    const { order } = await createOrderWithRoutingAndBilling({
       merchantId,
       recipient,
       lines,
     });
-    // Record-only billing ledger for the freshly-routed order.
-    await recordOrderBilling(order.id);
     orderId = order.id;
   } catch (e) {
     if (e instanceof UnroutableLineError) {

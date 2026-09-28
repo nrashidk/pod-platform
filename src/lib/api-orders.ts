@@ -4,7 +4,9 @@
 // This is the machine-facing counterpart of src/app/ops/new-order/actions.ts.
 // It RESOLVES the merchant from the API key, validates the JSON order, enforces
 // idempotency race-safely, and then calls the EXISTING engine
-// (createOrderWithRouting → recordOrderBilling) — it reimplements NEITHER.
+// (createOrderWithRoutingAndBilling — routes AND bills in one transaction, so a
+// billing failure can never orphan a routed order under this idempotency key,
+// queue item 2) — it reimplements NEITHER routing nor billing.
 // The merchant is ALWAYS derived from the key, never from the body.
 //
 // Deliberately Next-independent (no next/*): it takes the raw Authorization
@@ -17,12 +19,8 @@
 import { Prisma, PrintMethod } from "@prisma/client";
 import { prisma } from "./prisma";
 import { resolveMerchantFromApiKey } from "./api-auth";
-import {
-  createOrderWithRouting,
-  UnroutableLineError,
-  type CreateOrderLineInput,
-} from "./orders";
-import { recordOrderBilling } from "./billing";
+import { UnroutableLineError, type CreateOrderLineInput } from "./orders";
+import { createOrderWithRoutingAndBilling } from "./billing";
 import { getDesignOrderability } from "./designs";
 
 // ── Stable, machine-readable error codes. These are part of the API contract —
@@ -338,10 +336,15 @@ export async function apiCreateOrder(
     throw e;
   }
 
-  // ── (6) WINNER: create + bill via the EXISTING engine, then complete the claim.
+  // ── (6) WINNER: route + bill via the EXISTING engine (one transaction — queue
+  // item 2), then complete the claim.
   try {
-    const order = await createOrderWithRouting({ merchantId, recipient, currency, lines });
-    await recordOrderBilling(order.id);
+    const { order } = await createOrderWithRoutingAndBilling({
+      merchantId,
+      recipient,
+      currency,
+      lines,
+    });
     await prisma.orderIdempotencyKey.update({
       where: { id: claimId },
       data: { status: "COMPLETED", orderId: order.id },
@@ -349,9 +352,9 @@ export async function apiCreateOrder(
     const shape = await loadOrderShape(order.id);
     return { httpStatus: 201, body: shape };
   } catch (e) {
-    // Creation failed → release the claim so the SAME key can be retried after
-    // the caller fixes the order (otherwise a transient failure would lock the
-    // key forever).
+    // Routing+billing failed atomically → nothing was written for this order,
+    // so it's always safe to release the claim and let the SAME key retry
+    // (otherwise a transient failure would lock the key forever).
     await prisma.orderIdempotencyKey.delete({ where: { id: claimId } }).catch(() => {});
 
     if (e instanceof UnroutableLineError) {

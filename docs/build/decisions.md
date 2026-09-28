@@ -196,3 +196,28 @@ PR "Align data model with P3; resolve P17".
   double-call test on a second order, since the pre-existing sequential
   re-record check never actually overlaps two calls in time and so could
   never have caught this race · PR #7
+- 2026-09-28 · queue 2 (order creation and billing in one transaction) · how
+  to make createOrderWithRouting (orders.ts) and recordOrderBilling
+  (billing.ts) commit atomically without merging billing concerns INTO
+  orders.ts (the file's own header comment says money/wallet movement is
+  deliberately deferred out of routing) → split each function into a pure
+  "compute" step (routing: `planRoutedOrder`, no writes) and a "write with a
+  given `tx`" step (`persistRoutedOrder`, `writeOrderBilling`, both now take
+  a `Prisma.TransactionClient` instead of opening their own
+  `prisma.$transaction`), then added `createOrderWithRoutingAndBilling` in
+  billing.ts — still "layered ON TOP of orders.ts, never inside it" per that
+  file's existing framing — which opens ONE transaction and runs both write
+  steps inside it. `createOrderWithRouting` and `recordOrderBilling` stay as
+  standalone convenience wrappers (each opening its own transaction) for
+  existing smoke tests and any future manual backfill/retry use; only the two
+  production call sites (ops new-order action, API intake) were switched to
+  the combined function. This also fixes a worse latent bug the same gap
+  caused in the API path: on any failure after order creation it deleted the
+  idempotency claim, so a retry with the same key would have created a
+  SECOND order instead of recovering the orphaned first one — now impossible,
+  since the whole write is one transaction and a failure leaves nothing
+  behind for the claim to point at. No schema change (pure refactor, additive
+  types only). New smoke test `prisma/order-billing-atomic-smoke.ts` proves
+  the happy path bills in the same call, and that an unroutable line leaves
+  zero orders/wallet-transactions/ledger-entries behind — same coverage style
+  as the existing billing-reconcile/billing-race smokes · PR (this one)

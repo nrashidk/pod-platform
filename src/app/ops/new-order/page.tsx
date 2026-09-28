@@ -3,8 +3,8 @@
 // as /ops. Loads the merchants, the active catalog (products + variants + the
 // methods each product type can actually be made in), and the designs, then
 // hands them to the client form. Submitting feeds the EXISTING
-// createOrderWithRouting + recordOrderBilling (see ./actions). Bilingual EN/AR
-// with RTL — dir on the page container.
+// createOrderWithRoutingAndBilling (see ./actions). Bilingual EN/AR with RTL —
+// dir on the page container.
 
 import Link from "next/link";
 import { requireRole } from "@/lib/auth-context";

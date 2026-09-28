@@ -21,9 +21,16 @@
 // first_article_required (they're routing/production attributes), but leave
 // hold_status at its NONE default and the hold amounts null — the retention
 // engine is a later sub-step.
+//
+// `persistRoutedOrder` below takes its Prisma transaction client as a
+// parameter rather than opening its own, so a caller layered ON TOP (billing.ts
+// — never the other way around) can run routing persistence and billing in ONE
+// transaction (queue item 2: a billing failure must not leave a routed order
+// with no charge). This file still never imports billing.ts or writes a wallet/
+// ledger row itself.
 // ─────────────────────────────────────────────────────────────
 
-import type { OrderOrigination, PrintMethod } from "@prisma/client";
+import type { OrderOrigination, Prisma, PrintMethod } from "@prisma/client";
 import { prisma } from "./prisma";
 import { findEligiblePrinters } from "./routing";
 
@@ -93,13 +100,39 @@ export class UnroutableLineError extends Error {
   }
 }
 
+/** A routed line grouped into its Fulfillment, with the order-level totals — the
+ * pure-computation result of routing, before anything is written. */
+interface FulfillmentPlan {
+  printerId: string;
+  lines: RoutedLine[];
+  wholesale_cost: number;
+  is_bulk: boolean;
+  capabilityId: string | null;
+}
+
+export interface RoutedOrderPlan {
+  input: CreateOrderInput;
+  fulfillmentPlans: FulfillmentPlan[];
+  retail_total: number;
+  currency: string;
+}
+
+/** A Fulfillment row as persisted, in the shape billing needs (queue item 2's
+ * atomic composition reads wholesale_cost off the actually-written row, never
+ * off the in-memory plan, so billing and the ledger always agree with what's
+ * in the database). */
+export interface PersistedFulfillment {
+  id: string;
+  printerId: string;
+  wholesale_cost: Prisma.Decimal;
+}
+
 /**
- * Create an Order, route every line, and split the lines into Fulfillments by
- * chosen printer. Returns the persisted Order with its fulfillments (each
- * including its lines + printer). Throws UnroutableLineError if any line has no
- * eligible printer — the whole order is rejected (nothing is written).
+ * Route every line and compute the per-fulfillment plan. Pure computation
+ * (reads only, no writes). Throws UnroutableLineError if any line has no
+ * eligible printer.
  */
-export async function createOrderWithRouting(input: CreateOrderInput) {
+export async function planRoutedOrder(input: CreateOrderInput): Promise<RoutedOrderPlan> {
   if (!input.lines.length) {
     throw new Error("createOrderWithRouting: order must have at least one line");
   }
@@ -184,65 +217,89 @@ export async function createOrderWithRouting(input: CreateOrderInput) {
   );
   const currency = input.currency ?? "AED";
 
-  // ── (4) PERSIST atomically: Order → Fulfillments → OrderLines. ──
-  const orderId = await prisma.$transaction(async (tx) => {
-    const order = await tx.order.create({
-      data: {
-        origination: input.origination ?? "OWN_STORE",
-        merchantId: input.merchantId,
-        storeId: input.storeId ?? null,
-        external_order_ref: input.externalOrderRef ?? null,
-        // Fulfillments are assigned below ⇒ the order's derived display status
-        // is ROUTED. (Full status derivation / payment gating is a later step.)
-        status: "ROUTED",
-        recipient_name: input.recipient.name,
-        recipient_phone: input.recipient.phone ?? null,
-        shipping_line1: input.recipient.line1,
-        shipping_line2: input.recipient.line2 ?? null,
-        shipping_city: input.recipient.city,
-        shipping_emirate: input.recipient.emirate ?? null,
-        shipping_country: input.recipient.country ?? "AE",
-        retail_total: retail_total.toFixed(2),
-        currency,
-        // paid_at stays null — payment is collected by the store's gateway,
-        // not this function (platform never holds buyer funds).
-      },
-    });
+  return { input, fulfillmentPlans, retail_total, currency };
+}
 
-    for (const plan of fulfillmentPlans) {
-      const fulfillment = await tx.fulfillment.create({
-        data: {
-          orderId: order.id,
-          printerId: plan.printerId,
-          capabilityId: plan.capabilityId,
-          status: "ROUTED", // printer assigned
-          wholesale_cost: plan.wholesale_cost.toFixed(2),
-          is_bulk: plan.is_bulk,
-          first_article_required: plan.is_bulk, // mandatory on bulk
-          // hold_status defaults NONE; hold amounts left null — retention
-          // engine is deferred this phase.
-        },
-      });
+/**
+ * Persist a routed plan's Order → Fulfillments → OrderLines using the given
+ * transaction client. Takes `tx` as a parameter (rather than opening its own
+ * `prisma.$transaction`) so a caller can fold this into a larger transaction —
+ * see createOrderWithRoutingAndBilling in billing.ts. `createOrderWithRouting`
+ * below is the standalone convenience wrapper that opens its own transaction.
+ */
+export async function persistRoutedOrder(
+  tx: Prisma.TransactionClient,
+  plan: RoutedOrderPlan
+): Promise<{ orderId: string; fulfillments: PersistedFulfillment[] }> {
+  const { input, fulfillmentPlans, retail_total, currency } = plan;
 
-      for (const l of plan.lines) {
-        await tx.orderLine.create({
-          data: {
-            orderId: order.id,
-            fulfillmentId: fulfillment.id,
-            productId: l.input.productId,
-            variantId: l.input.variantId,
-            designId: l.input.designId,
-            method: l.input.method,
-            quantity: l.input.quantity,
-            unit_retail: l.input.unit_retail.toFixed(2),
-          },
-        });
-      }
-    }
-
-    return order.id;
+  const order = await tx.order.create({
+    data: {
+      origination: input.origination ?? "OWN_STORE",
+      merchantId: input.merchantId,
+      storeId: input.storeId ?? null,
+      external_order_ref: input.externalOrderRef ?? null,
+      // Fulfillments are assigned below ⇒ the order's derived display status
+      // is ROUTED. (Full status derivation / payment gating is a later step.)
+      status: "ROUTED",
+      recipient_name: input.recipient.name,
+      recipient_phone: input.recipient.phone ?? null,
+      shipping_line1: input.recipient.line1,
+      shipping_line2: input.recipient.line2 ?? null,
+      shipping_city: input.recipient.city,
+      shipping_emirate: input.recipient.emirate ?? null,
+      shipping_country: input.recipient.country ?? "AE",
+      retail_total: retail_total.toFixed(2),
+      currency,
+      // paid_at stays null — payment is collected by the store's gateway,
+      // not this function (platform never holds buyer funds).
+    },
   });
 
+  const fulfillments: PersistedFulfillment[] = [];
+  for (const fp of fulfillmentPlans) {
+    const fulfillment = await tx.fulfillment.create({
+      data: {
+        orderId: order.id,
+        printerId: fp.printerId,
+        capabilityId: fp.capabilityId,
+        status: "ROUTED", // printer assigned
+        wholesale_cost: fp.wholesale_cost.toFixed(2),
+        is_bulk: fp.is_bulk,
+        first_article_required: fp.is_bulk, // mandatory on bulk
+        // hold_status defaults NONE; hold amounts left null — retention
+        // engine is deferred this phase.
+      },
+    });
+    fulfillments.push({
+      id: fulfillment.id,
+      printerId: fulfillment.printerId,
+      wholesale_cost: fulfillment.wholesale_cost,
+    });
+
+    for (const l of fp.lines) {
+      await tx.orderLine.create({
+        data: {
+          orderId: order.id,
+          fulfillmentId: fulfillment.id,
+          productId: l.input.productId,
+          variantId: l.input.variantId,
+          designId: l.input.designId,
+          method: l.input.method,
+          quantity: l.input.quantity,
+          unit_retail: l.input.unit_retail.toFixed(2),
+        },
+      });
+    }
+  }
+
+  return { orderId: order.id, fulfillments };
+}
+
+/** Re-load a persisted order with its fulfillments (+ printer) and lines —
+ * the shape both createOrderWithRouting and createOrderWithRoutingAndBilling
+ * return. */
+export function loadOrderWithFulfillments(orderId: string) {
   return prisma.order.findUniqueOrThrow({
     where: { id: orderId },
     include: {
@@ -253,4 +310,20 @@ export async function createOrderWithRouting(input: CreateOrderInput) {
       lines: true,
     },
   });
+}
+
+/**
+ * Create an Order, route every line, and split the lines into Fulfillments by
+ * chosen printer. Returns the persisted Order with its fulfillments (each
+ * including its lines + printer). Throws UnroutableLineError if any line has no
+ * eligible printer — the whole order is rejected (nothing is written).
+ *
+ * Standalone routing only — no billing. Production call sites that also need
+ * the billing ledger recorded atomically with order creation (queue item 2)
+ * use createOrderWithRoutingAndBilling (src/lib/billing.ts) instead.
+ */
+export async function createOrderWithRouting(input: CreateOrderInput) {
+  const plan = await planRoutedOrder(input);
+  const { orderId } = await prisma.$transaction((tx) => persistRoutedOrder(tx, plan));
+  return loadOrderWithFulfillments(orderId);
 }

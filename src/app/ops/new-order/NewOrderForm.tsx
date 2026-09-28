@@ -5,7 +5,7 @@
 // are mirrored into a hidden JSON field so the server action gets them in
 // formData. Errors come back via useActionState (UnroutableLineError etc.) and
 // render inline — no crash, no navigation. The server action owns auth +
-// validation + createOrderWithRouting + recordOrderBilling.
+// validation + createOrderWithRoutingAndBilling.
 
 import { useActionState, useMemo, useState } from "react";
 import type { PrintMethod } from "@prisma/client";
