@@ -1,0 +1,87 @@
+name: CI
+
+# Runs on every PR and on every push to main (the post-merge check: two PRs
+# that are each green on their own can still break main together).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.head_ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    name: Build and smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Throwaway local Postgres. CI never talks to Neon and uses no secrets:
+    # every value below is a fixed, public, CI-only placeholder.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pod_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pod_ci
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/pod_ci
+      BETTER_AUTH_SECRET: ci-only-placeholder-not-a-real-secret-0000000000
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Guard — no Neon or secrets in CI config
+        run: |
+          if grep -RniE 'neon\.tech|secrets\.' .github/workflows/; then
+            echo "CI must not reference Neon or any repository secret." >&2
+            exit 1
+          fi
+
+      - name: Apply migrations to the local Postgres
+        run: npx prisma migrate deploy
+
+      # Fails if prisma/schema.prisma was changed without a matching migration.
+      # Uses a separate scratch database because Prisma wipes the shadow DB.
+      - name: Schema matches migrations (no missing migration)
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE pod_shadow;'
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url postgresql://postgres:postgres@localhost:5432/pod_shadow \
+            --exit-code
+
+      - name: Seed test data
+        run: npm run db:seed
+
+      - name: Build (includes TypeScript type-check)
+        run: npm run build
+
+      - name: Smoke tests
+        run: npm run test:smoke
