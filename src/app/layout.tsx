@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic, IBM_Plex_Mono } from "next/font/google";
-import { defaultLocale, getDirection } from "@/lib/i18n";
+import { getDirection } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/locale";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -27,15 +28,14 @@ const mono = IBM_Plex_Mono({
   display: "swap",
 });
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Locale-driven lang/dir. For now we fall back to the default locale; once
-  // locale resolution exists (middleware / [locale] segment), pass the resolved
-  // locale here and `lang` + `dir` follow automatically — RTL included.
-  const locale = defaultLocale;
+  // Locale-driven lang/dir, resolved once per request by src/middleware.ts
+  // (?lang= → cookie → default) — RTL included.
+  const locale = await getRequestLocale();
   const dir = getDirection(locale);
 
   return (

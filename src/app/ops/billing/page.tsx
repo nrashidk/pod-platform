@@ -10,7 +10,8 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { getDirection, isLocale, type Locale } from "@/lib/i18n";
+import { getDirection, type Locale } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/locale";
 import { holdStatus, REASON_HELD_30 } from "@/lib/printer-hold";
 import { openDefectClaim, closeDefectClaim } from "../claim-actions";
 import { LogoutButton } from "@/components/logout-button";
@@ -30,7 +31,7 @@ export default async function BillingPage({
   await requireRole("OPERATOR"); // DATA-LAYER gate, independent of middleware.
 
   const sp = await searchParams;
-  const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
+  const locale: Locale = await getRequestLocale(sp.lang);
   const dir = getDirection(locale);
   const justCreated = Boolean(sp.created);
   const claimError = Boolean(sp.claimErr);

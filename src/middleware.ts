@@ -15,24 +15,58 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
+import { LOCALE_COOKIE, LOCALE_HEADER, isLocale, resolveLocale } from "./lib/i18n";
 
+// Locale resolution runs for every page: ?lang= → cookie → default. The result
+// is forwarded to the root layout/pages as a request header (so <html lang dir>
+// is right on the very first render) and an explicit ?lang= is remembered in a
+// cookie so it survives links that do not carry the query string.
 export function middleware(request: NextRequest) {
-  // Cookie-presence check only (no decode/verify). Must match the cookiePrefix
-  // configured in src/lib/auth.ts so we look for the right cookie.
-  const sessionCookie = getSessionCookie(request, {
-    cookiePrefix: "pod_backoffice",
-  });
+  const { pathname, searchParams } = request.nextUrl;
+  const queryLang = searchParams.get("lang");
+  const cookieLang = request.cookies.get(LOCALE_COOKIE)?.value;
+  const locale = resolveLocale(queryLang, cookieLang);
+  // <Link> prefetches (e.g. the inactive language toggle) must not change the
+  // remembered language — only a real navigation does.
+  const isPrefetch =
+    request.headers.has("next-router-prefetch") ||
+    request.headers.get("purpose") === "prefetch";
+  const remember =
+    !isPrefetch && queryLang !== null && isLocale(queryLang) && queryLang !== cookieLang;
 
-  if (!sessionCookie) {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+  const withCookie = (res: NextResponse) => {
+    if (remember) {
+      res.cookies.set(LOCALE_COOKIE, locale, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: "lax",
+      });
+    }
+    return res;
+  };
+
+  // Auth UX gate — /ops only. Cookie-presence check only (no decode/verify).
+  // Must match the cookiePrefix configured in src/lib/auth.ts.
+  if (pathname === "/ops" || pathname.startsWith("/ops/")) {
+    const sessionCookie = getSessionCookie(request, {
+      cookiePrefix: "pod_backoffice",
+    });
+    if (!sessionCookie) {
+      // Keep the language through the bounce to /login.
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("lang", locale);
+      return withCookie(NextResponse.redirect(loginUrl));
+    }
   }
 
-  // Has a cookie → let it through. Role/ownership is still checked server-side.
-  return NextResponse.next();
+  // Forward the resolved locale to the server render.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(LOCALE_HEADER, locale);
+  return withCookie(NextResponse.next({ request: { headers: requestHeaders } }));
 }
 
 export const config = {
-  // Gate the back-office surface only. /login and the auth API stay public.
-  matcher: ["/ops", "/ops/:path*"],
+  // Every page (locale) — /api, Next internals and static files are skipped.
+  // The auth gate inside only applies to /ops; /login stays public.
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };

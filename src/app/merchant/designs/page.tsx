@@ -6,7 +6,8 @@
 // Bilingual EN/AR with RTL — framed by the shared merchant shell.
 
 import { requireRole } from "@/lib/auth-context";
-import { isLocale, type Locale } from "@/lib/i18n";
+import { type Locale } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/locale";
 import { listMyDesigns, listDesignableProductTypes } from "@/lib/designs";
 import { prisma } from "@/lib/prisma";
 import { MerchantShell } from "../MerchantShell";
@@ -32,7 +33,7 @@ export default async function MerchantDesignsPage({
   const ctx = await requireRole("MERCHANT");
 
   const sp = await searchParams;
-  const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
+  const locale: Locale = await getRequestLocale(sp.lang);
 
   const [designs, productTypes, wallet] = await Promise.all([
     ctx.merchantId ? listMyDesigns(ctx.merchantId) : Promise.resolve([]),

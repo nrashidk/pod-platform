@@ -28,7 +28,8 @@
     "test:wallet-topup": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/wallet-topup-smoke.ts",
     "test:design-manager": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/design-manager-smoke.ts",
     "test:printer-hold": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/printer-hold-smoke.ts",
-    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:printer && npm run test:billing && npm run test:billing-race && npm run test:order-billing-atomic && npm run test:api-intake && npm run test:wallet-topup && npm run test:design-manager && npm run test:printer-hold"
+    "test:locale": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/locale-smoke.ts",
+    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:printer && npm run test:billing && npm run test:billing-race && npm run test:order-billing-atomic && npm run test:api-intake && npm run test:wallet-topup && npm run test:design-manager && npm run test:printer-hold && npm run test:locale"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
