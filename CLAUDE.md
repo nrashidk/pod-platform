@@ -10,19 +10,24 @@ the printer's wholesale cost.
 - `/docs/pod-platform-data-model.md` — the full model: money flow, order lifecycle,
   routing, defect/protection rules. **Read this before building anything.**
 - `/docs/schema-foundation.prisma` — the catalog + capability-matrix schema (build
-  step 1). The order/fulfillment layer is not yet specced.
-If anything you're about to build contradicts these docs, STOP and ask — don't
-improvise around them.
+  step 1). `/docs/schema-orders.prisma` — the order/fulfillment layer spec.
+  `prisma/schema.prisma` is the live schema built from both.
+If anything you're about to build contradicts these docs, STOP — don't improvise
+around them. Interactive sessions ask; autonomous runs park it
+(`docs/build/parked.md`) and move on.
 
-## How to work with me (non-negotiable)
-- **One step at a time.** Do the single task asked, then stop and confirm before
-  moving to the next. Do NOT scaffold the whole system in one shot.
-- **Confirm before proceeding** to any new phase or any change that touches more than
-  the current task.
-- **Ask before installing dependencies, changing config, or creating files** outside
-  the immediate task.
-- Show me what you're about to do before doing anything destructive or wide-reaching.
-- Prefer small, reviewable changes over large ones.
+## How work happens here
+- **Autonomous builder runs** (the "POD builder" routine) follow
+  `docs/build/charter.md` and **never ask questions**. They take the next item
+  from `docs/build/queue.md`, log judgement calls in `docs/build/decisions.md`,
+  and park anything that needs the owner in `docs/build/parked.md`. The
+  routine's full instructions are in `docs/build/routine.md`.
+- **Interactive owner sessions** may still work step by step: do the single
+  task asked, confirm before moving to a new phase or widening scope, and ask
+  before installing dependencies, changing config, or doing anything
+  destructive. Record any ruling the owner gives in `charter.md` §5.
+- Either way: small, reviewable PRs; never push to `main`; tests run against a
+  local Postgres only, never Neon.
 
 ## Hard technical constraints
 - **Bilingual EN/AR with full RTL support is mandatory** across every UI. Every
@@ -31,6 +36,7 @@ improvise around them.
 - Browser-only workflow (Codespaces). No assumptions about a local machine.
 
 ## Build order (from docs §10 — do not skip ahead)
+Live status and the split into PR-sized items: `docs/build/queue.md`.
 1. Scaffold Next.js + Prisma + Neon connection (skeleton only).
 2. Apply the foundation schema; run first migration; seed the two real printers.
 3. Verify capability-matrix queries: given a product + method, return eligible printers.
@@ -48,5 +54,7 @@ improvise around them.
   deliberately removed.
 
 ## When unsure
-Ask a short, specific question. Don't guess on architecture, money flow, or anything
-that contradicts `/docs`.
+Don't guess on architecture, money flow, or anything that contradicts `/docs`.
+Interactive sessions: ask a short, specific question. Autonomous runs: follow
+`docs/build/charter.md` §3 (take the documented default, log it in
+`decisions.md`, or park it).
