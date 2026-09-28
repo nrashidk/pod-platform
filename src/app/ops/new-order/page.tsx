@@ -9,7 +9,8 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { getDirection, isLocale, type Locale } from "@/lib/i18n";
+import { getDirection, type Locale } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/locale";
 import { LogoutButton } from "@/components/logout-button";
 import { t } from "../labels";
 import { nt } from "./labels";
@@ -28,7 +29,7 @@ export default async function NewOrderPage({
   await requireRole("OPERATOR"); // DATA-LAYER gate, independent of middleware.
 
   const sp = await searchParams;
-  const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
+  const locale: Locale = await getRequestLocale(sp.lang);
   const dir = getDirection(locale);
 
   const [merchants, productRows, designs] = await Promise.all([

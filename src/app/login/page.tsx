@@ -3,7 +3,8 @@
 // and hands them to the interactive client component. There is intentionally no
 // public sign-up — back-office users are provisioned by seed/admin only.
 
-import { isLocale, type Locale } from "@/lib/i18n";
+import { type Locale } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/locale";
 import { LoginClient } from "./login-client";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export default async function LoginPage({
   searchParams: Promise<{ lang?: string; error?: string }>;
 }) {
   const sp = await searchParams;
-  const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
+  const locale: Locale = await getRequestLocale(sp.lang);
   const forbidden = sp.error === "forbidden";
   return <LoginClient initialLocale={locale} forbidden={forbidden} />;
 }

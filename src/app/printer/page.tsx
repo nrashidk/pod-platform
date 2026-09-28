@@ -10,7 +10,8 @@ import type { FulfillmentStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth-context";
 import { getFulfillmentsForPrinter } from "@/lib/orders-access";
 import { nextPrinterStatus } from "@/lib/fulfillment";
-import { getDirection, isLocale, type Locale } from "@/lib/i18n";
+import { getDirection, type Locale } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/locale";
 import { LogoutButton } from "@/components/logout-button";
 import { fulfillmentStatusLabel, methodLabel, t } from "./labels";
 import { advanceAction } from "./actions";
@@ -30,7 +31,7 @@ export default async function PrinterPage({
   const ctx = await requireRole("PRINTER");
 
   const sp = await searchParams;
-  const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
+  const locale: Locale = await getRequestLocale(sp.lang);
   const dir = getDirection(locale);
   const errFulfillmentId = sp.err ?? null;
 

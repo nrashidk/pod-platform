@@ -92,6 +92,13 @@ export function LoginClient({
   );
   const [submitting, setSubmitting] = useState(false);
 
+  // Switch language via the URL so the middleware remembers it (cookie) and the
+  // root layout re-renders <html lang dir>; typed form state is kept (same route).
+  function switchLocale(next: Locale) {
+    setLocale(next);
+    router.replace(`/login?lang=${next}`);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -180,10 +187,10 @@ export function LoginClient({
               </span>
             </div>
             <div className="flex gap-2">
-              <LangBtn active={locale === "en"} onClick={() => setLocale("en")}>
+              <LangBtn active={locale === "en"} onClick={() => switchLocale("en")}>
                 English
               </LangBtn>
-              <LangBtn active={locale === "ar"} onClick={() => setLocale("ar")}>
+              <LangBtn active={locale === "ar"} onClick={() => switchLocale("ar")}>
                 العربية
               </LangBtn>
             </div>

@@ -7,6 +7,11 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 export async function resolve(specifier, context, next) {
+  // `next` ships CJS entry points without an "exports" map; plain Node ESM needs
+  // the explicit file (the Next bundler does not).
+  if (specifier === "next/server") {
+    return next("next/server.js", context);
+  }
   if (specifier.startsWith(".") && context.parentURL && !path.extname(specifier)) {
     const parentPath = fileURLToPath(context.parentURL);
     const resolved = path.resolve(path.dirname(parentPath), specifier);

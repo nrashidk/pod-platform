@@ -13,7 +13,8 @@ import { requireRole } from "@/lib/auth-context";
 import { getOrdersForCaller } from "@/lib/orders-access";
 import { listMyDesigns } from "@/lib/designs";
 import { prisma } from "@/lib/prisma";
-import { isLocale, type Locale } from "@/lib/i18n";
+import { type Locale } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/locale";
 import { MerchantShell } from "./MerchantShell";
 import { TopUpForm } from "./TopUpForm";
 import { OrderStatusBadge, Badge } from "./badges";
@@ -42,7 +43,7 @@ export default async function MerchantDashboardPage({
   const ctx = await requireRole("MERCHANT");
 
   const sp = await searchParams;
-  const locale: Locale = isLocale(sp.lang ?? "") ? (sp.lang as Locale) : "en";
+  const locale: Locale = await getRequestLocale(sp.lang);
   const topupState = sp.topup; // "processing" | "cancelled" after a gateway return
 
   const [orders, wallet, designs] = await Promise.all([
