@@ -36,9 +36,8 @@ PR "Apply owner rulings P1–P16".
 - Checkout shows **ONE BLENDED shipping rate** for the whole order. Never a
   per-parcel breakdown.
 - Per the owner, the blended rate is what covers multiple parcels in the
-  P3 tier-3 capacity-overflow case. (Open clarification on other multi-parcel
-  cases — see parked P17; it does not block building, because one blended
-  rate per order applies in every case.)
+  P3 tier-3 capacity-overflow case. Extended to every multi-parcel case by
+  ruling P17 below.
 - Affects: queue 29.
 
 ### P3 · Routing — three tiers (replaces cheapest-first-only)
@@ -54,8 +53,8 @@ P15 below). Among the eligible printers:
    when no single eligible printer can produce the full quantity.
 - "Only 1 eligible printer → it gets 100%" is unchanged.
 - **This supersedes data model §3 step 1 ("Quantity is never divided across
-  printers") for the overflow case only.** The data model text itself is not
-  edited by this ruling; charter rule 10 now names this exception.
+  printers") for the overflow case only.** Data model §3 was updated to
+  state this single rule (see P3/P17 follow-up below).
 - Affects: queue 6 (rewritten), 32 (unblocked).
 
 ### P5 · Design ownership — merchant-scoped in code
@@ -135,6 +134,36 @@ P15 below). Among the eligible printers:
 ### P4 · Printer count — no ruling given
 - P4 was not in the ruling list of 28 Sep 2026. It never blocked code; kept as a pre-launch
   business item in `PRE-PRODUCTION.md` (it never blocked code).
+
+## Owner rulings — 28 Sep 2026, follow-up (P3 alignment, P17)
+
+Source: owner, interactive session of 28 Sep 2026. Recorded in the docs-only
+PR "Align data model with P3; resolve P17".
+
+### P3 (alignment) · One routing rule in the data model
+- `docs/pod-platform-data-model.md` §3 now states the single rule: a line's
+  quantity is **not** divided across printers, **except on capacity overflow**
+  (P3 tier 3) — when no single eligible printer can produce the full
+  quantity. Each resulting part is its own Fulfillment, which remains the unit
+  of liability, shipping, tracking and claims for its parcel. §3 step 4 lists
+  the three tiers. There is no longer a data-model/charter conflict to carry.
+
+### P17 · Blended shipping applies to every multi-parcel order
+- The buyer is **always charged ONE blended shipping rate for the whole
+  order**, regardless of how many printers/parcels it fans into. This covers
+  all three multi-parcel causes: (a) products no single printer makes,
+  (b) P3 tier-2 rotation of lines across tied printers, (c) P3 tier-3
+  capacity overflow. **Never per-parcel, in any case.**
+- The platform absorbs the true multi-parcel shipping cost internally; the
+  buyer-facing rate is one number.
+- The rate's **value** is a pricing-calibration matter tied to the deferred
+  pricing stack (P7). Not built now: queue 29 uses one configurable
+  placeholder constant; the real value is set pre-launch (`PRE-PRODUCTION.md`
+  15).
+- Consequence for routing: tier-2 rotation scope is a free builder choice
+  again (no shipping-price reason to keep one order's lines together); log it
+  in `decisions.md` when queue 32 is built.
+- Affects: queue 29, 32; data model §7 updated; parked P17 → resolved.
 
 ## Builder decisions
 

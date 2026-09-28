@@ -47,11 +47,11 @@ what he needs to do (if anything).
    must render correctly with `dir="rtl"`. A UI PR without Arabic is not done.
    Arabic copy the builder writes is marked in the PR body as "machine-drafted,
    owner to review" — it is not blocked on review.
-10. **Never contradict `docs/pod-platform-data-model.md`**, except where an
-    owner ruling (§5 / `decisions.md`) explicitly supersedes a point — today
-    only one: owner ruling P3 allows splitting a line's quantity across
-    printers **on capacity overflow only** (data model §3 step 1 otherwise
-    still applies). In particular:
+10. **Never contradict `docs/pod-platform-data-model.md`.** Owner rulings
+    are folded into it; the one allowed exception to "quantity is never
+    divided across printers" — splitting a line **on capacity overflow only**
+    (owner ruling P3 tier 3) — is now stated in data model §3 itself. In
+    particular:
     - The platform **never holds buyer funds**. No escrow, no buyer money in
       platform accounts. The buyer pays the store's gateway.
     - **No "Clock A"** — no buyer payment-release / validation timer. It was
@@ -154,7 +154,7 @@ The builder never writes a ruling the owner did not give.
 ### Owner rulings of 28 Sep 2026 (P1–P16)
 - Recorded in full in `docs/build/decisions.md` → "Owner rulings". They are
   binding exactly as if written here. Summary: Stripe test-mode only, licence
-  = go-live gate (P1); one blended shipping rate (P2); three-tier routing —
+  = go-live gate (P1); one blended shipping rate for the whole order, never per-parcel, in every multi-parcel case (P2, P17); three-tier routing —
   whole line to one printer, rotate whole lines across tied printers, split
   quantity only on capacity overflow (P3); designs merchant-scoped (P5); keep
   Stripe top-ups (P6); keep flat 30% markup, stacked pricing deferred (P7);
@@ -168,9 +168,8 @@ The builder never writes a ruling the owner did not give.
   (data model §0, §9 "Resolved").
 - Clock A / escrow / buyer payment-release timer: permanently removed.
 - Routing: capability gate → capacity gate → cost (primary) → proximity
-  (tiebreaker); quantity never split across printers (data model §3) —
-  **amended by owner ruling P3** (tie rotation; split only on capacity
-  overflow).
+  (tiebreaker); whole lines to one printer, rotate whole lines on ties,
+  split quantity only on capacity overflow (data model §3, owner ruling P3).
 - Printer protection: print-file validation + mandatory first-article on bulk
   + 70/30 retention on bulk (Fulfillment ≥ AED 1,000), 30% released on
   delivery + claim-window-closed event, per order; netting fallback; removal
