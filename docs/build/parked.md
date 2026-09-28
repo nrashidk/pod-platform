@@ -142,17 +142,16 @@ Format:
   `BLOB_READ_WRITE_TOKEN` in Vercel.
 - Blocks: production launch. Code parts are queue 25 and 26.
 
-### P14 · Setup needed before the routine can run
+### P14 · Network access for the routine's environment
 - Raised: 2026-09-28 · this foundation PR
-- Why: in the session that created these files, (a) pushing to GitHub was
-  refused (403: the Claude GitHub App lacked write access to
-  `nrashidk/pod-platform`), and (b) the network policy blocked
-  `binaries.prisma.sh`, so Prisma could not install and nothing could be
-  built or tested locally.
-- What is needed from owner: give the Claude GitHub App write access to the
-  repo; allow `binaries.prisma.sh`, the npm registry and Google Fonts in the
-  routine's environment network settings (see `routine.md` §1).
-- Blocks: the POD builder routine doing any work.
+- Why: in the session that created these files the network policy blocked
+  `binaries.prisma.sh`, so Prisma could not install and nothing could be built
+  or tested locally (CI on GitHub was the first real run). GitHub write access
+  was missing too; the owner granted it on 28 Sep 2026.
+- What is needed from owner: create the routine's environment with the
+  network access and setup script in `routine.md` §1a–§1b.
+- Blocks: the POD builder routine building/testing locally (it can still rely
+  on CI, but slower).
 
 ### P15 · Printer contracts in writing
 - Raised: 2026-09-28 · data model §5b "Contract must state"

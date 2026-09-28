@@ -10,7 +10,7 @@ if you edit the prompt below, paste it into the routine again.
 |---|---|
 | Name | `POD builder` |
 | Repository | `nrashidk/pod-platform` (the Claude GitHub App must have **write** access to it — push, PRs, issues, labels, merge) |
-| Environment | A cloud environment with network access that allows: GitHub, the npm registry, `binaries.prisma.sh` (Prisma engines) and `fonts.googleapis.com` / `fonts.gstatic.com` (Next.js font download at build). No secrets or environment variables are needed — do **not** add Neon, Stripe or Vercel values. |
+| Environment | A cloud environment with the network access listed in §1b and the setup script in §1a. **No secrets or environment variables** — do not add Neon, Stripe, Vercel Blob or Better Auth values. |
 | Setup script | see §1a below |
 | Triggers | (a) **GitHub event: pull request closed** on `nrashidk/pod-platform`; (b) **schedule: every 4 hours** (`0 */4 * * *`) |
 | Connectors | **None.** |
@@ -21,22 +21,41 @@ if you edit the prompt below, paste it into the routine again.
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+# Works whether the container runs as root (no sudo) or as a sudo-capable user.
+SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 # Node 22 (matches CI)
 if ! node -v 2>/dev/null | grep -q '^v22'; then
-  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-  sudo apt-get install -y nodejs
+  curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO bash -
+  $SUDO apt-get install -y nodejs
 fi
-# Local PostgreSQL 16 — the ONLY database the builder may use.
-if ! command -v pg_ctl >/dev/null && ! ls /usr/lib/postgresql/*/bin/pg_ctl >/dev/null 2>&1; then
-  sudo apt-get update && sudo apt-get install -y postgresql
+# Local PostgreSQL — the ONLY database the builder may use.
+if ! ls /usr/lib/postgresql/*/bin/pg_ctl >/dev/null 2>&1; then
+  $SUDO apt-get update && $SUDO apt-get install -y postgresql
 fi
-sudo service postgresql start
-sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
-sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='pod_local'" | grep -q 1 \
-  || sudo -u postgres psql -c "CREATE DATABASE pod_local;"
-sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='pod_shadow'" | grep -q 1 \
-  || sudo -u postgres psql -c "CREATE DATABASE pod_shadow;"
+$SUDO service postgresql start
+PSQL() { $SUDO su postgres -c "psql -v ON_ERROR_STOP=1 $*"; }
+PSQL "-c \"ALTER USER postgres PASSWORD 'postgres';\""
+for db in pod_local pod_shadow; do
+  PSQL "-tc \"SELECT 1 FROM pg_database WHERE datname='$db'\"" | grep -q 1 \
+    || PSQL "-c 'CREATE DATABASE $db;'"
+done
 ```
+
+### 1b. Environment network access (required)
+
+Set the environment's network access to allow **at least** these hosts
+(a "trusted"/default allow-list that already includes them is also fine):
+
+| Host | Why |
+|---|---|
+| `github.com`, `api.github.com` | clone, push, PRs, status issue |
+| `registry.npmjs.org` | `npm ci` |
+| `binaries.prisma.sh` | Prisma engine download during `npm ci` (without it nothing installs, builds or tests) |
+| `fonts.googleapis.com`, `fonts.gstatic.com` | `next build` downloads the IBM Plex fonts |
+| `deb.nodesource.com`, the Ubuntu/Debian apt mirrors | only if the setup script has to install Node 22 or PostgreSQL |
+
+Never allow-list `*.neon.tech`, `api.stripe.com` or `*.blob.vercel-storage.com`
+for the builder: it must not reach production services (charter rule 7).
 
 ## 2. Prompt to paste into the routine
 
@@ -50,7 +69,7 @@ docs/pod-platform-data-model.md on the money model.
 
 1. `git checkout main && git pull origin main`.
 2. Start the local database and point everything at it — never at Neon:
-     sudo service postgresql start
+     service postgresql start || sudo service postgresql start
      export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pod_local
      export DIRECT_URL=$DATABASE_URL
      export BETTER_AUTH_SECRET=local-only-placeholder-not-a-real-secret-000000
