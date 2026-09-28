@@ -26,10 +26,23 @@
 // DEFERRED (do NOT add here): the PricingTier engine. The flat markup below is
 // the single place a tier engine will later replace — mirrors BULK_THRESHOLD_AED
 // in orders.ts.
+//
+// createOrderWithRoutingAndBilling (bottom of this file) is the production
+// entry point: it runs orders.ts's persistRoutedOrder and this file's ledger
+// writes inside ONE transaction, so a billing failure can never leave a routed
+// order with no charge (queue item 2). recordOrderBilling stays as the
+// standalone function (its own transaction) for smoke tests and any future
+// backfill/retry use.
 // ─────────────────────────────────────────────────────────────
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
+import {
+  planRoutedOrder,
+  persistRoutedOrder,
+  loadOrderWithFulfillments,
+  type CreateOrderInput,
+} from "./orders";
 
 /**
  * Flat merchant markup over a fulfillment's wholesale cost, this phase's whole
@@ -97,14 +110,116 @@ function computeFulfillmentBilling(
   });
 }
 
+/** The minimal order shape writeOrderBilling needs — either freshly fetched
+ * (recordOrderBilling) or the just-written row from persistRoutedOrder
+ * (createOrderWithRoutingAndBilling), so both paths write byte-identical
+ * ledger rows off the same function. */
+interface BillableOrder {
+  id: string;
+  merchantId: string;
+  currency: string;
+  fulfillments: { id: string; printerId: string; wholesale_cost: unknown }[];
+}
+
 /**
- * Record the billing ledger for an already-routed order. RECORD-ONLY: writes one
- * PrinterLedgerEntry (printer side, +owed) and one WalletTransaction (merchant
- * side, −debit) per Fulfillment, all in one transaction. Idempotent guard: a
- * BillingClaim(orderId) unique-constraint insert, claimed first inside the same
- * transaction — race-safe under concurrent calls (see BillingClaim in
+ * Write the billing ledger for an order using the given transaction client.
+ * RECORD-ONLY: writes one PrinterLedgerEntry (printer side, +owed) and one
+ * WalletTransaction (merchant side, −debit) per Fulfillment. Idempotent guard:
+ * a BillingClaim(orderId) unique-constraint insert, claimed first inside the
+ * same transaction — race-safe under concurrent calls (see BillingClaim in
  * schema.prisma). Throws BillingAlreadyRecordedError if the claim is already
  * held. Returns the per-fulfillment numbers + totals.
+ *
+ * Takes `tx` as a parameter (rather than opening its own `prisma.$transaction`)
+ * so recordOrderBilling and createOrderWithRoutingAndBilling can each supply
+ * their own transaction scope — the latter shares ONE transaction with order
+ * creation (queue item 2).
+ */
+async function writeOrderBilling(
+  tx: Prisma.TransactionClient,
+  order: BillableOrder
+): Promise<OrderBilling> {
+  const lines = computeFulfillmentBilling(order.fulfillments);
+
+  // Idempotency claim — a real unique-constraint insert, not a findFirst.
+  // WalletTransaction has one row PER FULFILLMENT for an order (the loop
+  // below), so it can never carry a unique constraint on orderId alone;
+  // BillingClaim.orderId can, and does. Two concurrent calls for the same
+  // order both attempt this insert; exactly one wins, the loser hits the
+  // unique violation, its whole transaction rolls back, and it throws here
+  // — so the same order is billed EXACTLY once even under concurrent callers.
+  try {
+    await tx.billingClaim.create({ data: { orderId: order.id } });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw new BillingAlreadyRecordedError(order.id);
+    }
+    throw e;
+  }
+
+  // Ensure the merchant has a wallet (record-only — NOT a top-up; balance
+  // starts wherever it is and accrues the debt as negative amounts).
+  const wallet = await tx.wallet.upsert({
+    where: { merchantId: order.merchantId },
+    create: { merchantId: order.merchantId, currency: order.currency },
+    update: {},
+  });
+
+  for (const l of lines) {
+    // ── Printer side: +amount = owed TO the printer (model's sign convention).
+    await tx.printerLedgerEntry.create({
+      data: {
+        printerId: l.printerId,
+        amount: l.printer_paid.toFixed(2),
+        reason: `WHOLESALE_OWED order:${order.id}`,
+        fulfillmentId: l.fulfillmentId,
+        settled: false,
+      },
+    });
+
+    // ── Merchant side: a FULFILLMENT_CHARGE debits the wallet (NEGATIVE
+    // amount). Atomic `decrement` — never read-then-write an absolute value —
+    // so a concurrent credit (e.g. a Stripe top-up via
+    // src/lib/payments/webhook.ts, which credits with the matching atomic
+    // `increment`) can never be lost to this write. balance_after comes
+    // straight off the row the update returns.
+    const updated = await tx.wallet.update({
+      where: { id: wallet.id },
+      data: { balance: { decrement: l.merchant_owed.toFixed(2) } },
+    });
+    await tx.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: "FULFILLMENT_CHARGE",
+        amount: (-l.merchant_owed).toFixed(2),
+        balance_after: updated.balance,
+        orderId: order.id,
+        note: `f:${l.fulfillmentId} owed=${l.merchant_owed.toFixed(2)} paid=${l.printer_paid.toFixed(2)} margin=${l.platform_margin.toFixed(2)}`,
+      },
+    });
+  }
+
+  const totals = {
+    printer_paid: round2(lines.reduce((s, l) => s + l.printer_paid, 0)),
+    merchant_owed: round2(lines.reduce((s, l) => s + l.merchant_owed, 0)),
+    platform_margin: round2(lines.reduce((s, l) => s + l.platform_margin, 0)),
+  };
+
+  return {
+    orderId: order.id,
+    merchantId: order.merchantId,
+    currency: order.currency,
+    fulfillments: lines,
+    totals,
+  };
+}
+
+/**
+ * Record the billing ledger for an already-routed order, in its own
+ * transaction. Standalone entry point — smoke tests and any future manual
+ * backfill/retry use. Production order creation uses
+ * createOrderWithRoutingAndBilling below instead, so creation and billing
+ * always commit or roll back together.
  */
 export async function recordOrderBilling(orderId: string): Promise<OrderBilling> {
   const order = await prisma.order.findUniqueOrThrow({
@@ -117,79 +232,42 @@ export async function recordOrderBilling(orderId: string): Promise<OrderBilling>
     },
   });
 
-  const lines = computeFulfillmentBilling(order.fulfillments);
+  return prisma.$transaction((tx) => writeOrderBilling(tx, order));
+}
 
-  await prisma.$transaction(async (tx) => {
-    // Idempotency claim — a real unique-constraint insert, not a findFirst.
-    // WalletTransaction has one row PER FULFILLMENT for an order (the loop
-    // below), so it can never carry a unique constraint on orderId alone;
-    // BillingClaim.orderId can, and does. Two concurrent calls for the same
-    // order both attempt this insert; exactly one wins, the loser hits the
-    // unique violation, its whole transaction rolls back, and it throws here
-    // — so the same order is billed EXACTLY once even under concurrent callers.
-    try {
-      await tx.billingClaim.create({ data: { orderId } });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        throw new BillingAlreadyRecordedError(orderId);
-      }
-      throw e;
-    }
+/**
+ * Route the lines, then persist the Order/Fulfillments (orders.ts) AND record
+ * the billing ledger (this file) inside ONE transaction. Fixes queue item 2:
+ * previously createOrderWithRouting and recordOrderBilling ran as two separate
+ * transactions, so a billing failure (or a crash between the two calls) left a
+ * routed, unbilled order — worse, the API intake path then deleted its
+ * idempotency claim, so a retry with the same key created a SECOND order
+ * instead of recovering the first. Now either both commit or neither does, and
+ * the idempotency claim always maps to a real, billed order. Record-only
+ * semantics are unchanged — this only changes WHEN the two writes commit
+ * relative to each other, not what they write.
+ *
+ * Routing (planRoutedOrder) still runs its reads before the transaction opens,
+ * same as createOrderWithRouting — an UnroutableLineError is thrown before
+ * anything is written, so the "reject the whole order" behaviour is unchanged.
+ */
+export async function createOrderWithRoutingAndBilling(
+  input: CreateOrderInput
+): Promise<{ order: Awaited<ReturnType<typeof loadOrderWithFulfillments>>; billing: OrderBilling }> {
+  const plan = await planRoutedOrder(input);
+  const currency = plan.currency;
 
-    // Ensure the merchant has a wallet (record-only — NOT a top-up; balance
-    // starts wherever it is and accrues the debt as negative amounts).
-    const wallet = await tx.wallet.upsert({
-      where: { merchantId: order.merchantId },
-      create: { merchantId: order.merchantId, currency: order.currency },
-      update: {},
+  const { orderId, billing } = await prisma.$transaction(async (tx) => {
+    const persisted = await persistRoutedOrder(tx, plan);
+    const result = await writeOrderBilling(tx, {
+      id: persisted.orderId,
+      merchantId: input.merchantId,
+      currency,
+      fulfillments: persisted.fulfillments,
     });
-
-    for (const l of lines) {
-      // ── Printer side: +amount = owed TO the printer (model's sign convention).
-      await tx.printerLedgerEntry.create({
-        data: {
-          printerId: l.printerId,
-          amount: l.printer_paid.toFixed(2),
-          reason: `WHOLESALE_OWED order:${orderId}`,
-          fulfillmentId: l.fulfillmentId,
-          settled: false,
-        },
-      });
-
-      // ── Merchant side: a FULFILLMENT_CHARGE debits the wallet (NEGATIVE
-      // amount). Atomic `decrement` — never read-then-write an absolute value —
-      // so a concurrent credit (e.g. a Stripe top-up via
-      // src/lib/payments/webhook.ts, which credits with the matching atomic
-      // `increment`) can never be lost to this write. balance_after comes
-      // straight off the row the update returns.
-      const updated = await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { decrement: l.merchant_owed.toFixed(2) } },
-      });
-      await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: "FULFILLMENT_CHARGE",
-          amount: (-l.merchant_owed).toFixed(2),
-          balance_after: updated.balance,
-          orderId,
-          note: `f:${l.fulfillmentId} owed=${l.merchant_owed.toFixed(2)} paid=${l.printer_paid.toFixed(2)} margin=${l.platform_margin.toFixed(2)}`,
-        },
-      });
-    }
+    return { orderId: persisted.orderId, billing: result };
   });
 
-  const totals = {
-    printer_paid: round2(lines.reduce((s, l) => s + l.printer_paid, 0)),
-    merchant_owed: round2(lines.reduce((s, l) => s + l.merchant_owed, 0)),
-    platform_margin: round2(lines.reduce((s, l) => s + l.platform_margin, 0)),
-  };
-
-  return {
-    orderId,
-    merchantId: order.merchantId,
-    currency: order.currency,
-    fulfillments: lines,
-    totals,
-  };
+  const order = await loadOrderWithFulfillments(orderId);
+  return { order, billing };
 }
