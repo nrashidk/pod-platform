@@ -167,4 +167,13 @@ PR "Align data model with P3; resolve P17".
 
 ## Builder decisions
 
-(none yet)
+- 2026-09-28 · queue 1 (wallet lost update in billing) · how to make the smoke
+  test actually exercise the race, given Node is single-threaded → fire the
+  billing charge and a top-up webhook credit concurrently with
+  `Promise.all` against the same wallet row (both are `await`-ing async
+  Postgres round-trips, so their transactions genuinely interleave at the
+  database), then assert the final balance is exactly
+  `start + topup − charged` and replay every `WalletTransaction.balance_after`
+  against the starting balance (simplest way to prove no update was lost,
+  reversible, matches the existing wallet-topup-smoke.ts style) · PR
+  (pending)

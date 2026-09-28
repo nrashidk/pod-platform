@@ -134,8 +134,6 @@ export async function recordOrderBilling(orderId: string): Promise<OrderBilling>
       update: {},
     });
 
-    let balance = Number(wallet.balance);
-
     for (const l of lines) {
       // ── Printer side: +amount = owed TO the printer (model's sign convention).
       await tx.printerLedgerEntry.create({
@@ -149,24 +147,26 @@ export async function recordOrderBilling(orderId: string): Promise<OrderBilling>
       });
 
       // ── Merchant side: a FULFILLMENT_CHARGE debits the wallet (NEGATIVE
-      // amount); balance is the running net the merchant owes.
-      balance = round2(balance - l.merchant_owed);
+      // amount). Atomic `decrement` — never read-then-write an absolute value —
+      // so a concurrent credit (e.g. a Stripe top-up via
+      // src/lib/payments/webhook.ts, which credits with the matching atomic
+      // `increment`) can never be lost to this write. balance_after comes
+      // straight off the row the update returns.
+      const updated = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { decrement: l.merchant_owed } },
+      });
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
           type: "FULFILLMENT_CHARGE",
           amount: (-l.merchant_owed).toFixed(2),
-          balance_after: balance.toFixed(2),
+          balance_after: updated.balance,
           orderId,
           note: `f:${l.fulfillmentId} owed=${l.merchant_owed.toFixed(2)} paid=${l.printer_paid.toFixed(2)} margin=${l.platform_margin.toFixed(2)}`,
         },
       });
     }
-
-    await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balance: balance.toFixed(2) },
-    });
   });
 
   const totals = {
