@@ -26,7 +26,13 @@ export function middleware(request: NextRequest) {
   const queryLang = searchParams.get("lang");
   const cookieLang = request.cookies.get(LOCALE_COOKIE)?.value;
   const locale = resolveLocale(queryLang, cookieLang);
-  const remember = queryLang !== null && isLocale(queryLang) && queryLang !== cookieLang;
+  // <Link> prefetches (e.g. the inactive language toggle) must not change the
+  // remembered language — only a real navigation does.
+  const isPrefetch =
+    request.headers.has("next-router-prefetch") ||
+    request.headers.get("purpose") === "prefetch";
+  const remember =
+    !isPrefetch && queryLang !== null && isLocale(queryLang) && queryLang !== cookieLang;
 
   const withCookie = (res: NextResponse) => {
     if (remember) {

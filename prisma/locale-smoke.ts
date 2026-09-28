@@ -52,6 +52,28 @@ check("login redirect keeps lang=ar (query)", new URL(loc, "http://x").searchPar
 res = middleware(mk("/ops/billing", `${LOCALE_COOKIE}=ar`));
 check("login redirect keeps lang from cookie", new URL(res.headers.get("location") ?? "", "http://x").searchParams.get("lang") === "ar");
 
+res = middleware(mk("/ops?lang=ar"));
+check("bounce also remembers lang in cookie", setCookie(res).includes(`${LOCALE_COOKIE}=ar`), setCookie(res));
+check("cookie is Path=/, Max-Age set, SameSite=lax",
+  /Path=\//i.test(setCookie(res)) && /Max-Age=\d+/i.test(setCookie(res)) && /SameSite=lax/i.test(setCookie(res)), setCookie(res));
+
+// a prefetch must not change the remembered language
+const pre = new NextRequest("http://localhost:3000/?lang=ar", { headers: { "next-router-prefetch": "1" } });
+res = middleware(pre);
+check("prefetch does not set the cookie", !setCookie(res).includes(LOCALE_COOKIE), setCookie(res));
+
+// with a session cookie /ops passes through (no redirect) and forwards locale
+res = middleware(mk("/ops?lang=ar", "pod_backoffice.session_token=x"));
+check("/ops with session cookie passes through", !res.headers.get("location") && fwd(res) === "ar", [res.headers.get("location"), fwd(res)]);
+
+// matcher: pages match, api / next internals / static files do not
+const { config } = await import("../src/middleware");
+const re = new RegExp("^" + config.matcher[0] + "$");
+for (const [path, want] of [["/", true], ["/login", true], ["/ops/billing", true], ["/merchant/orders", true],
+  ["/api/auth/x", false], ["/_next/static/a.js", false], ["/favicon.ico", false], ["/x.png", false]] as const) {
+  check(`matcher ${want ? "matches" : "skips"} ${path}`, re.test(path) === want);
+}
+
 // non-/ops pages are never bounced
 res = middleware(mk("/merchant?lang=en"));
 check("/merchant not auth-bounced by middleware", !res.headers.get("location"));

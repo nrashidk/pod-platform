@@ -96,7 +96,8 @@ export function LoginClient({
   // root layout re-renders <html lang dir>; typed form state is kept (same route).
   function switchLocale(next: Locale) {
     setLocale(next);
-    router.replace(`/login?lang=${next}`);
+    // Keep the ?error=forbidden banner flag across the switch.
+    router.replace(forbidden ? `/login?lang=${next}&error=forbidden` : `/login?lang=${next}`);
   }
 
   async function onSubmit(e: React.FormEvent) {

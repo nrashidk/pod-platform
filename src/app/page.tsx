@@ -16,7 +16,7 @@ const L = {
   },
   intro: {
     en: "Route orders to trusted UAE & GCC printers that blind-ship under your brand. Choose your area to sign in.",
-    ar: "وجِّه الطلبات إلى مطابع موثوقة في الإمارات والخليج تشحن باسم علامتك التجارية. اختر منطقتك لتسجيل الدخول.",
+    ar: "وجِّه الطلبات إلى مطابع موثوقة في الإمارات والخليج تشحن باسم علامتك التجارية. اختر قسمك لتسجيل الدخول.",
   },
   ops: { en: "Operations", ar: "العمليات" },
   opsDesc: {
@@ -64,10 +64,10 @@ export default async function Home({
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">{tr(L.title)}</h1>
         <nav aria-label="Language" className="flex gap-1">
-          <Link href="/?lang=en" className={`${base} ${locale === "en" ? active : inactive}`}>
+          <Link href="/?lang=en" prefetch={false} className={`${base} ${locale === "en" ? active : inactive}`}>
             {L.langEN.en}
           </Link>
-          <Link href="/?lang=ar" className={`${base} ${locale === "ar" ? active : inactive}`}>
+          <Link href="/?lang=ar" prefetch={false} className={`${base} ${locale === "ar" ? active : inactive}`}>
             {L.langAR.ar}
           </Link>
         </nav>
