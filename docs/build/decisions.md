@@ -181,3 +181,18 @@ PR "Align data model with P3; resolve P17".
   made an order-by-`createdAt` replay unreliable → replaced with a
   permutation search that accepts any write order whose sequential replay
   reproduces every recorded `balance_after` · PR #6
+- 2026-09-28 · queue 1b (harden the billing idempotency guard) · how to give
+  `recordOrderBilling`'s "already recorded" check a real serialization point,
+  given `WalletTransaction.orderId` can never carry a unique constraint (it
+  holds one row PER FULFILLMENT for an order, not one per order, so two
+  legitimate rows for the same order would collide) → added a small
+  dedicated `BillingClaim` table (`orderId` unique), claimed with an insert
+  first inside the same transaction as the ledger writes, mirroring the
+  existing `ProcessedWebhookEvent` / `OrderIdempotencyKey` race-safe-claim
+  pattern already used elsewhere in this codebase (reversible, consistent,
+  additive migration only — a new table, no rewrite of existing rows, so not
+  `needs-human` under charter rule 12); extended
+  `prisma/billing-reconcile-smoke.ts` with a `Promise.allSettled` concurrent
+  double-call test on a second order, since the pre-existing sequential
+  re-record check never actually overlaps two calls in time and so could
+  never have caught this race · PR #7

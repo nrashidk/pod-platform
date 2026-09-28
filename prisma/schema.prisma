@@ -437,6 +437,22 @@ model ProcessedWebhookEvent {
   @@unique([provider, event_id])
 }
 
+// Idempotency claim for recordOrderBilling (src/lib/billing.ts). The prior
+// guard — a plain findFirst on WalletTransaction.orderId — is not a
+// serialization point under READ COMMITTED: two concurrent calls for the
+// same order could both read "not yet recorded" before either commits, and
+// both post ledger entries (a double charge). WalletTransaction itself can
+// never carry a unique constraint on orderId alone — it holds ONE ROW PER
+// FULFILLMENT for an order, not one per order. This row IS unique per order
+// and is claimed FIRST, inside the same transaction as the ledger writes —
+// the SAME race-safe pattern as OrderIdempotencyKey / ProcessedWebhookEvent
+// above: exactly one concurrent caller's insert can win.
+model BillingClaim {
+  id        String   @id @default(cuid())
+  orderId   String   @unique
+  createdAt DateTime @default(now())
+}
+
 // An external store connected to the platform. Interchangeable adapter — core
 // never cares which platform. v1 = OWN; v1.1 = SHOPIFY; v1.2+ = SALLA, ZID.
 model StoreConnection {

@@ -28,6 +28,7 @@
 // in orders.ts.
 // ─────────────────────────────────────────────────────────────
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
 /**
@@ -99,9 +100,11 @@ function computeFulfillmentBilling(
 /**
  * Record the billing ledger for an already-routed order. RECORD-ONLY: writes one
  * PrinterLedgerEntry (printer side, +owed) and one WalletTransaction (merchant
- * side, −debit) per Fulfillment, all in one transaction. Idempotent guard: throws
- * BillingAlreadyRecordedError if any WalletTransaction already exists for this
- * order. Returns the per-fulfillment numbers + totals.
+ * side, −debit) per Fulfillment, all in one transaction. Idempotent guard: a
+ * BillingClaim(orderId) unique-constraint insert, claimed first inside the same
+ * transaction — race-safe under concurrent calls (see BillingClaim in
+ * schema.prisma). Throws BillingAlreadyRecordedError if the claim is already
+ * held. Returns the per-fulfillment numbers + totals.
  */
 export async function recordOrderBilling(orderId: string): Promise<OrderBilling> {
   const order = await prisma.order.findUniqueOrThrow({
@@ -117,13 +120,20 @@ export async function recordOrderBilling(orderId: string): Promise<OrderBilling>
   const lines = computeFulfillmentBilling(order.fulfillments);
 
   await prisma.$transaction(async (tx) => {
-    // Re-check inside the transaction so a concurrent record can't double-write.
-    const already = await tx.walletTransaction.findFirst({
-      where: { orderId },
-      select: { id: true },
-    });
-    if (already) {
-      throw new BillingAlreadyRecordedError(orderId);
+    // Idempotency claim — a real unique-constraint insert, not a findFirst.
+    // WalletTransaction has one row PER FULFILLMENT for an order (the loop
+    // below), so it can never carry a unique constraint on orderId alone;
+    // BillingClaim.orderId can, and does. Two concurrent calls for the same
+    // order both attempt this insert; exactly one wins, the loser hits the
+    // unique violation, its whole transaction rolls back, and it throws here
+    // — so the same order is billed EXACTLY once even under concurrent callers.
+    try {
+      await tx.billingClaim.create({ data: { orderId } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw new BillingAlreadyRecordedError(orderId);
+      }
+      throw e;
     }
 
     // Ensure the merchant has a wallet (record-only — NOT a top-up; balance

@@ -8,6 +8,8 @@
 //   per order:        Σ merchant_owed − Σ printer_paid === Σ platform_margin
 //   aggregate:        same identity across all rows
 //   idempotency:      re-recording throws BillingAlreadyRecordedError
+//   race-safety:      two CONCURRENT calls for the same order still record
+//                      exactly once (BillingClaim unique-constraint claim)
 //
 // Idempotent: wipes its own TEST fixtures first. Assumes `npm run db:seed`.
 // Run: npm run test:billing
@@ -222,6 +224,58 @@ async function main() {
   checks.push([
     `still exactly 2 WalletTransactions after retry (got ${txnCount})`,
     txnCount === 2,
+  ]);
+
+  // ════════════════════════════════════════════════════════════════
+  // CONCURRENT double-call on a SECOND order → still records EXACTLY once.
+  // Before the BillingClaim unique-constraint claim, the "already recorded"
+  // guard was a plain findFirst: under READ COMMITTED, two concurrent
+  // recordOrderBilling(orderId) calls could both read "not yet recorded"
+  // before either commits, and both post ledger entries — a double charge
+  // the sequential check above can never catch (it never overlaps in time).
+  // ════════════════════════════════════════════════════════════════
+  const order2 = await createOrderWithRouting({
+    merchantId: merchant.id,
+    recipient: {
+      name: "Test Buyer",
+      line1: "1 Test Street",
+      city: "Dubai",
+      emirate: "Dubai",
+    },
+    lines: [
+      {
+        productId: tshirt.id,
+        variantId: tshirt.variants[0].id,
+        designId: design.id,
+        method: "DTG",
+        quantity: 10,
+        unit_retail: 79.0,
+      },
+    ],
+  });
+
+  const concResults = await Promise.allSettled([
+    recordOrderBilling(order2.id),
+    recordOrderBilling(order2.id),
+  ]);
+  const fulfilledCount = concResults.filter((r) => r.status === "fulfilled").length;
+  const guardedCount = concResults.filter(
+    (r) => r.status === "rejected" && r.reason instanceof BillingAlreadyRecordedError
+  ).length;
+  checks.push([
+    "concurrent double-call: exactly ONE call recorded billing",
+    fulfilledCount === 1,
+  ]);
+  checks.push([
+    "concurrent double-call: the other hit BillingAlreadyRecordedError (not a double-charge)",
+    guardedCount === 1,
+  ]);
+  const order2TxnCount = await prisma.walletTransaction.count({
+    where: { orderId: order2.id },
+  });
+  checks.push([
+    `concurrent double-call: exactly 1 WalletTransaction for order2, not 2 (got ${order2TxnCount})`,
+    order2TxnCount === 1,
   ]);
 
   console.log("\nAssertions:");
