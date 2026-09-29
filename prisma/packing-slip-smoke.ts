@@ -6,6 +6,8 @@
 import { createOrderWithRouting } from "../src/lib/orders.ts";
 import { getPackingSlipForPrinter } from "../src/lib/packing-slip.ts";
 import { prisma } from "../src/lib/prisma.ts";
+import { printerBrandLogoUrl } from "../src/lib/printer-work.ts";
+import { StubPrintFileStore } from "../src/lib/print-file-store.ts";
 
 let ok = true;
 function check(label: string, pass: boolean) {
@@ -102,7 +104,43 @@ async function main() {
   check("an empty printer id gets no slip", (await getPackingSlipForPrinter("", f.id)) === null);
   check("an unknown fulfillment gets no slip", (await getPackingSlipForPrinter(f.printerId, "nope")) === null);
 
+  // Logo (queue 10b): ownership-scoped signed link, never the raw reference.
+  const store = new StubPrintFileStore();
+  check(
+    "no logo set → no logo link",
+    (await printerBrandLogoUrl(f.printerId, f.id, store)) === null
+  );
+  const stored = await store.put({
+    buffer: Buffer.from("logo"),
+    filename: "slip-logo.png",
+    contentType: "image/png",
+  });
+  await prisma.merchant.update({ where: { id: merchant.id }, data: { brand_logo_url: stored.url } });
+  check(
+    "owning printer gets a signed logo link",
+    (await printerBrandLogoUrl(f.printerId, f.id, store)) === stored.url
+  );
+  check(
+    "slip data flags that a logo exists",
+    (await getPackingSlipForPrinter(f.printerId, f.id))?.order.merchant.brand_logo_url === stored.url
+  );
+  check(
+    "another printer / empty ids / unknown fulfillment get no logo link",
+    (await printerBrandLogoUrl("not-the-owner", f.id, store)) === null &&
+      (await printerBrandLogoUrl("", f.id, store)) === null &&
+      (await printerBrandLogoUrl(f.printerId, "", store)) === null &&
+      (await printerBrandLogoUrl(f.printerId, "nope", store)) === null
+  );
+  check(
+    "a logo the store cannot sign gives no link (not an error)",
+    (await printerBrandLogoUrl(f.printerId, f.id, new StubPrintFileStore())) === null
+  );
+
   await prisma.fulfillment.update({ where: { id: f.id }, data: { status: "REROUTED" } });
+  check(
+    "rerouted work gets no logo link",
+    (await printerBrandLogoUrl(f.printerId, f.id, store)) === null
+  );
   check("rerouted work gets no slip", (await getPackingSlipForPrinter(f.printerId, f.id)) === null);
   await prisma.fulfillment.update({ where: { id: f.id }, data: { status: "CANCELLED" } });
   check("cancelled work gets no slip", (await getPackingSlipForPrinter(f.printerId, f.id)) === null);

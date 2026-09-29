@@ -58,6 +58,14 @@ export default async function PackingSlipPage({
         </div>
 
         <header className="border-b border-gray-300 pb-4">
+          {order.merchant.brand_logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/printer/brand-logo?fulfillmentId=${encodeURIComponent(slip.id)}`}
+              alt={order.merchant.name}
+              className="mb-3 max-h-20 max-w-48 object-contain"
+            />
+          )}
           <h1 className="text-2xl font-bold">{order.merchant.name}</h1>
           <p className="mt-1 text-sm text-gray-600">{slipT("title", locale)}</p>
         </header>

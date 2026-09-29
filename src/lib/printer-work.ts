@@ -57,3 +57,32 @@ export async function printerWorkFileUrl(
     return null;
   }
 }
+
+/**
+ * Short-lived signed URL for the merchant's brand logo, for a fulfillment this
+ * printer owns (queue 10b). Same contract as printerWorkFileUrl: null — never an
+ * error — for a wrong printer, unknown or rerouted/cancelled fulfillment, no
+ * logo set, or a signing failure, so the route can answer one 404.
+ */
+export async function printerBrandLogoUrl(
+  printerId: string,
+  fulfillmentId: string,
+  store: PrintFileStore = getPrintFileStore()
+): Promise<string | null> {
+  if (!printerId || !fulfillmentId) return null; // never widen the filter
+  const f = await prisma.fulfillment.findFirst({
+    where: {
+      id: fulfillmentId,
+      printerId,
+      status: { notIn: [...NOT_PRODUCIBLE] },
+    },
+    select: { order: { select: { merchant: { select: { brand_logo_url: true } } } } },
+  });
+  const logo = f?.order.merchant.brand_logo_url;
+  if (!logo) return null;
+  try {
+    return await store.signedReadUrl(logo);
+  } catch {
+    return null;
+  }
+}
