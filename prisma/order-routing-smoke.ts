@@ -2,6 +2,7 @@
 // Creates clearly-labeled TEST fixtures (merchant zero, a design, two
 // products+variants), builds a 2-line order (T-Shirt+DTG ×10, Mug+UV ×20),
 // and asserts it splits into exactly two Fulfillments with correct costs.
+// Also covers queue 6: same-capability lines are routed as one group.
 //
 // Idempotent: wipes its own TEST fixtures first. Assumes `npm run db:seed` has
 // already created the TEST product types / printers / capabilities.
@@ -178,6 +179,7 @@ async function main() {
   const groupChecks: Array<[string, boolean]> = [
     ["same-capability lines (30+30 cards) meet min_qty 50 as a group", grouped.fulfillments.length === 1],
     ["group fulfillment carries both lines", grouped.fulfillments[0]?.lines.length === 2],
+    ["group lines share one fulfillment (one printer)", grouped.lines.every((l) => l.fulfillmentId === grouped.fulfillments[0]?.id)],
     ["group cost = 60 × 0.80 = 48", Number(grouped.fulfillments[0]?.wholesale_cost) === 48],
     ["group total 40 < min_qty 50 is unroutable", underMinRejected],
   ];

@@ -293,8 +293,9 @@ export async function persistRoutedOrder(
       },
     });
     // Capacity accounting (queue 5): reserve the units in the same transaction.
-    // Routing gates each line on its own; the reserve checks the group total, so
-    // a lost race or several lines on one printer can still overflow here. That
+    // Routing gates each capability group on its own total; the reserve checks the
+    // printer's whole Fulfillment (all its groups), so a lost race or several
+    // groups on one printer can still overflow here. That
     // is "no eligible printer" for the order, same as a pre-check failure.
     const groupUnits = fp.lines.reduce((sum, l) => sum + l.input.quantity, 0);
     try {
