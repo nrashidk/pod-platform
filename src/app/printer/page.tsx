@@ -177,11 +177,23 @@ export default async function PrinterPage({
                             label={t("brandName", locale)}
                             value={f.order.merchant.name}
                           />
-                          <BrandRow
-                            label={t("brandLogo", locale)}
-                            value={f.order.merchant.brand_logo_url}
-                            ltr
-                          />
+                          {f.order.merchant.brand_logo_url && (
+                            <div>
+                              <dt className="inline text-gray-500">
+                                {t("brandLogo", locale)}:{" "}
+                              </dt>
+                              <dd className="inline">
+                                <a
+                                  href={`/api/printer/brand-logo?fulfillmentId=${encodeURIComponent(f.id)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-blue-700 underline"
+                                >
+                                  {t("openLogo", locale)}
+                                </a>
+                              </dd>
+                            </div>
+                          )}
                           <BrandRow
                             label={t("brandMessage", locale)}
                             value={localizedBrandText(

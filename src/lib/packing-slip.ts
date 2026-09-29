@@ -36,6 +36,7 @@ export async function getPackingSlipForPrinter(
           merchant: {
             select: {
               name: true,
+              brand_logo_url: true,
               packing_slip_message: true,
               packing_slip_message_ar: true,
               return_address: true,

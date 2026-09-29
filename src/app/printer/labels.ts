@@ -86,6 +86,7 @@ const UI = {
   },
   brandName: { en: "Brand", ar: "العلامة التجارية" },
   brandLogo: { en: "Logo file", ar: "ملف الشعار" },
+  openLogo: { en: "Open logo", ar: "فتح الشعار" },
   brandMessage: { en: "Packing-slip message", ar: "رسالة قسيمة التعبئة" },
   brandReturn: { en: "Return address", ar: "عنوان الإرجاع" },
   brandPackaging: { en: "Packaging note", ar: "ملاحظة التغليف" },
