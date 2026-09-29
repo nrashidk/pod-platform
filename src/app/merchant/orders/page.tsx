@@ -16,7 +16,7 @@ import { type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/locale";
 import { MerchantShell } from "../MerchantShell";
 import { OrderStatusBadge, FulfillmentStatusBadge } from "../badges";
-import { methodLabel, t } from "../labels";
+import { methodLabel, shipT, t } from "../labels";
 
 // Always render fresh data — fulfillment statuses move between requests (driven
 // by printers/operators elsewhere; the merchant just sees the latest state).
@@ -126,6 +126,19 @@ export default async function MerchantOrdersPage({
                             </div>
                             <FulfillmentStatusBadge status={f.status} locale={locale} />
                           </div>
+
+                          {/* Shipment (carrier + tracking), created at dispatch */}
+                          {f.shipments[0] && (
+                            <p className="mt-2 text-sm text-muted">
+                              <span className="font-medium">{shipT("shipment", locale)}:</span>{" "}
+                              {shipT("carrier", locale)}: {f.shipments[0].carrier ?? shipT("notEntered", locale)}
+                              {" · "}
+                              {shipT("tracking", locale)}:{" "}
+                              <span className="font-mono" dir="ltr">
+                                {f.shipments[0].tracking_number ?? shipT("notEntered", locale)}
+                              </span>
+                            </p>
+                          )}
 
                           {/* Lines: product, variant, method, qty */}
                           <ul className="mt-3 space-y-1 border-t border-hairline pt-3 text-sm text-muted">

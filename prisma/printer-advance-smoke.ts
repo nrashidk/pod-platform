@@ -22,6 +22,7 @@ import {
   advanceFulfillment,
   FulfillmentOwnershipError,
   nextPrinterStatus,
+  parseShipmentDetails,
 } from "../src/lib/fulfillment.ts";
 import { prisma } from "../src/lib/prisma.ts";
 import type { AuthContext } from "../src/lib/auth-context.ts";
@@ -103,9 +104,31 @@ async function main() {
   // ── WRITE: advance OWN (positive) ───────────────────────────
   console.log("Advance own fulfillment along the printer subset:");
   await advanceFulfillment(fA.id, "IN_PRODUCTION", { ownerPrinterId: pA.id });
-  await advanceFulfillment(fA.id, "SHIPPED", { ownerPrinterId: pA.id });
+  await advanceFulfillment(fA.id, "SHIPPED", {
+    ownerPrinterId: pA.id,
+    shipment: { carrier: "TEST Carrier", trackingNumber: "TEST-TRK-001" },
+  });
   const aAfter = await prisma.fulfillment.findUniqueOrThrow({ where: { id: fA.id } });
   assert(aAfter.status === "SHIPPED", "printer A advanced own ROUTED → IN_PRODUCTION → SHIPPED");
+
+  // ── Shipment created at dispatch (queue 7) ──────────────────
+  console.log("Shipment on dispatch:");
+  const shipsAtShip = await prisma.shipment.findMany({ where: { fulfillmentId: fA.id } });
+  assert(shipsAtShip.length === 1, "exactly one Shipment row exists once SHIPPED");
+  assert(
+    shipsAtShip[0]?.carrier === "TEST Carrier" &&
+      shipsAtShip[0]?.tracking_number === "TEST-TRK-001",
+    "Shipment carries the carrier + tracking the printer entered"
+  );
+  assert(shipsAtShip[0]?.delivered_at == null, "Shipment is not yet delivered at dispatch");
+  assert(
+    parseShipmentDetails(" DHL ", " 123 ")?.carrier === "DHL" &&
+      parseShipmentDetails("DHL", "  ") === null &&
+      parseShipmentDetails("", "123") === null &&
+      parseShipmentDetails("x".repeat(101), "123") === null &&
+      parseShipmentDetails(null, undefined) === null,
+    "parseShipmentDetails trims and rejects empty / over-long / non-string input"
+  );
 
   // ── ★ WRITE: NEGATIVE — advance a fulfillment that ISN'T yours ──
   console.log("★ NEGATIVE: printer A forges printer B's fulfillmentId:");
@@ -138,6 +161,14 @@ async function main() {
   await advanceFulfillment(fA.id, "DELIVERED");
   const aOp = await prisma.fulfillment.findUniqueOrThrow({ where: { id: fA.id } });
   assert(aOp.status === "DELIVERED", "operator advance (no owner) still reaches DELIVERED");
+  const shipsAtDelivery = await prisma.shipment.findMany({ where: { fulfillmentId: fA.id } });
+  assert(
+    shipsAtDelivery.length === 1 &&
+      shipsAtDelivery[0]?.id === shipsAtShip[0]?.id &&
+      shipsAtDelivery[0]?.delivered_at != null &&
+      shipsAtDelivery[0]?.tracking_number === "TEST-TRK-001",
+    "DELIVERED reuses the dispatch Shipment (no duplicate) and keeps its tracking"
+  );
 
   await cleanup();
   await prisma.$disconnect();

@@ -13,7 +13,7 @@ import { nextPrinterStatus } from "@/lib/fulfillment";
 import { getDirection, type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/locale";
 import { LogoutButton } from "@/components/logout-button";
-import { fulfillmentStatusLabel, methodLabel, t } from "./labels";
+import { fulfillmentStatusLabel, methodLabel, shipT, t } from "./labels";
 import { advanceAction, firstArticlePhotoAction } from "./actions";
 
 // Always render fresh data — advances mutate state between requests.
@@ -191,6 +191,30 @@ export default async function PrinterPage({
                         />
                         <input type="hidden" name="toStatus" value={next} />
                         <input type="hidden" name="lang" value={locale} />
+                        {next === "SHIPPED" && (
+                          <div className="mb-2 flex flex-wrap gap-3">
+                            <label className="text-sm font-medium text-gray-700">
+                              {shipT("carrier", locale)}
+                              <input
+                                type="text"
+                                name="carrier"
+                                required
+                                maxLength={100}
+                                className="mt-1 block w-48 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                              />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                              {shipT("tracking", locale)}
+                              <input
+                                type="text"
+                                name="trackingNumber"
+                                required
+                                maxLength={100}
+                                className="mt-1 block w-56 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                              />
+                            </label>
+                          </div>
+                        )}
                         <button
                           type="submit"
                           className="inline-flex items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
@@ -204,7 +228,9 @@ export default async function PrinterPage({
                     {showError && (
                       <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
                         {t(
-                          why === "photo-type"
+                          why === "shipment"
+                            ? "shipmentRequired"
+                            : why === "photo-type"
                             ? "photoErrType"
                             : why === "photo-size"
                               ? "photoErrSize"

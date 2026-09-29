@@ -9,6 +9,7 @@ export {
   fulfillmentStatusLabel,
   methodLabel,
   orderStatusLabel,
+  shipT,
 } from "../ops/labels";
 
 type Bi = { en: string; ar: string };
@@ -70,6 +71,10 @@ const UI = {
   photoErrEmpty: {
     en: "The photo file is empty.",
     ar: "ملف الصورة فارغ.",
+  },
+  shipmentRequired: {
+    en: "Enter the carrier and tracking number before marking as shipped.",
+    ar: "أدخل شركة الشحن ورقم التتبّع قبل تسجيل الشحن.",
   },
   // Surfaced if an advance is somehow rejected at the engine (forged id, illegal
   // transition, or a target outside the printer-permitted subset).

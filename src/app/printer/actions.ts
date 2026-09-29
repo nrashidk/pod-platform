@@ -20,6 +20,7 @@ import {
   FirstArticleRequiredError,
   FulfillmentOwnershipError,
   InvalidTransitionError,
+  parseShipmentDetails,
   PRINTER_ADVANCE_TARGETS,
 } from "@/lib/fulfillment";
 import {
@@ -60,12 +61,23 @@ export async function advanceAction(formData: FormData) {
     redirect(`/printer?lang=${lang}&err=${fulfillmentId}`);
   }
 
+  // (2a') Dispatch needs carrier + tracking: SHIPPED without them is refused.
+  const shipment =
+    toStatus === "SHIPPED"
+      ? parseShipmentDetails(formData.get("carrier"), formData.get("trackingNumber"))
+      : null;
+  if (toStatus === "SHIPPED" && !shipment) {
+    revalidatePath("/printer");
+    redirect(`/printer?lang=${lang}&err=${fulfillmentId}&why=shipment`);
+  }
+
   try {
     // (2b) Ownership gate lives INSIDE advanceFulfillment's transaction: passing
     // ctx.printerId (session-derived, never client input) makes it verify the
     // persisted row's printerId matches before any mutation.
     await advanceFulfillment(fulfillmentId, toStatus, {
       ownerPrinterId: ctx.printerId,
+      ...(shipment ? { shipment } : {}),
     });
     // SHIPPED hook — same integration point as the operator action. On a BULK
     // fulfillment this splits the printer ledger 70/30; sub-threshold is a

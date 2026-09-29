@@ -202,6 +202,32 @@ export function computeOrderStatus(
   return "ROUTED";
 }
 
+/** Carrier + tracking number entered when a printer dispatches a fulfillment. */
+export interface ShipmentDetails {
+  carrier: string;
+  trackingNumber: string;
+}
+
+/** Longest carrier / tracking text we store (form input is untrusted). */
+export const SHIPMENT_FIELD_MAX = 100;
+
+/**
+ * Trim and validate carrier + tracking input. Returns null unless BOTH are
+ * non-empty and within SHIPMENT_FIELD_MAX — the printer dispatch action refuses
+ * to mark SHIPPED without them (queue 7).
+ */
+export function parseShipmentDetails(
+  carrier: unknown,
+  trackingNumber: unknown
+): ShipmentDetails | null {
+  const c = typeof carrier === "string" ? carrier.trim() : "";
+  const t = typeof trackingNumber === "string" ? trackingNumber.trim() : "";
+  if (!c || !t || c.length > SHIPMENT_FIELD_MAX || t.length > SHIPMENT_FIELD_MAX) {
+    return null;
+  }
+  return { carrier: c, trackingNumber: t };
+}
+
 export interface AdvanceOptions {
   /**
    * Timestamp used for the DELIVERED stamp (delivered_at + claim window).
@@ -220,6 +246,14 @@ export interface AdvanceOptions {
    * constraint) and behave exactly as before.
    */
   ownerPrinterId?: string;
+
+  /**
+   * Carrier + tracking recorded on the Shipment created at SHIPPED. Optional at
+   * this layer (operator advances and older callers omit it → the Shipment is
+   * still created, with null carrier/tracking); the PRINTER dispatch action
+   * requires it before calling.
+   */
+  shipment?: ShipmentDetails;
 }
 
 /**
@@ -229,7 +263,8 @@ export interface AdvanceOptions {
  * Enforces:
  *  (1) ordered transitions only (ALLOWED_NEXT) — illegal jumps/rewinds throw;
  *  (2) bulk Fulfillments cannot enter IN_PRODUCTION until first article approved;
- *  (3) DELIVERED requires/creates a Shipment, stamps delivered_at and sets
+ *  (3) SHIPPED creates the Shipment (carrier + tracking when given);
+ *      DELIVERED reuses it (or creates one), stamps delivered_at and sets
  *      claim_window_closes_at = delivered_at + 30 days.
  *
  * Returns the updated Fulfillment (with shipments) plus the recomputed parent
@@ -304,6 +339,18 @@ export async function advanceFulfillment(
           },
         });
       }
+    }
+
+    // (3a) SHIPPED: the Shipment row is created at dispatch (queue 7), carrying
+    // carrier + tracking when supplied. DELIVERED later reuses this row.
+    if (toStatus === "SHIPPED" && fulfillment.shipments.length === 0) {
+      await tx.shipment.create({
+        data: {
+          fulfillmentId,
+          carrier: opts.shipment?.carrier ?? null,
+          tracking_number: opts.shipment?.trackingNumber ?? null,
+        },
+      });
     }
 
     // Apply the Fulfillment transition.
