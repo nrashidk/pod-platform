@@ -621,6 +621,9 @@ model Fulfillment {
   // ── First-article approval (mandatory on bulk). ──
   first_article_required Boolean @default(false)
   first_article_approved_at DateTime?
+  // Photo proof of the first unit, uploaded by the printer (private Blob store).
+  first_article_photo_url         String?
+  first_article_photo_uploaded_at DateTime?
 
   claims      DefectClaim[]
   payments    PrinterPayment[]

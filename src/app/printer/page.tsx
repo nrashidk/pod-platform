@@ -14,7 +14,7 @@ import { getDirection, type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/locale";
 import { LogoutButton } from "@/components/logout-button";
 import { fulfillmentStatusLabel, methodLabel, t } from "./labels";
-import { advanceAction } from "./actions";
+import { advanceAction, firstArticlePhotoAction } from "./actions";
 
 // Always render fresh data — advances mutate state between requests.
 export const dynamic = "force-dynamic";
@@ -144,6 +144,37 @@ export default async function PrinterPage({
                           <span aria-hidden>⏳</span>
                           {t("blockedFirstArticle", locale)}
                         </p>
+                        {(f.status === "ROUTED" ||
+                          f.status === "FIRST_ARTICLE_PENDING") && (
+                          <form
+                            action={firstArticlePhotoAction}
+                            className="flex flex-col gap-2 rounded-md border border-gray-200 p-3"
+                          >
+                            <input type="hidden" name="fulfillmentId" value={f.id} />
+                            <input type="hidden" name="lang" value={locale} />
+                            <label className="text-sm font-medium text-gray-700">
+                              {t(
+                                f.status === "ROUTED"
+                                  ? "firstArticlePhotoLabel"
+                                  : "firstArticlePhotoReplace",
+                                locale
+                              )}
+                              <input
+                                type="file"
+                                name="photo"
+                                accept="image/jpeg,image/png,image/webp"
+                                required
+                                className="mt-1 block w-full text-sm text-gray-600 file:me-3 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white"
+                              />
+                            </label>
+                            <button
+                              type="submit"
+                              className="inline-flex w-fit items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
+                            >
+                              {t("firstArticlePhotoSubmit", locale)}
+                            </button>
+                          </form>
+                        )}
                       </div>
                     ) : (
                       <form action={advanceAction}>

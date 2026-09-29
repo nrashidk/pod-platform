@@ -69,6 +69,14 @@ const UI = {
     en: "First article produced — awaiting your approval against the print file.",
     ar: "تم إنتاج العيّنة الأولى — بانتظار اعتمادك مقارنةً بملف الطباعة.",
   },
+  firstArticlePhotoView: {
+    en: "View first-article photo",
+    ar: "عرض صورة العيّنة الأولى",
+  },
+  firstArticleNoPhoto: {
+    en: "No photo was uploaded for this first article.",
+    ar: "لم يتم رفع صورة لهذه العيّنة الأولى.",
+  },
   // Surfaced only if an advance is somehow attempted against the lifecycle rules.
   errorInvalidTransition: {
     en: "That transition isn't allowed from the current status.",

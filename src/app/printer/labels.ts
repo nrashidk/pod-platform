@@ -45,6 +45,20 @@ const UI = {
     en: "Blocked: first-article approval required before production (bulk order).",
     ar: "محجوب: يلزم اعتماد العيّنة الأولى قبل الإنتاج (طلب بكمية كبيرة).",
   },
+  // First-article photo proof (bulk): uploading the photo also submits the
+  // first article for ops approval.
+  firstArticlePhotoLabel: {
+    en: "Photo of the first unit (JPG, PNG or WebP, up to 4 MB)",
+    ar: "صورة الوحدة الأولى (JPG أو PNG أو WebP، حتى 4 ميجابايت)",
+  },
+  firstArticlePhotoReplace: {
+    en: "Replace the photo (awaiting approval)",
+    ar: "استبدال الصورة (بانتظار الاعتماد)",
+  },
+  firstArticlePhotoSubmit: {
+    en: "Upload photo and submit first article",
+    ar: "رفع الصورة وإرسال العيّنة الأولى",
+  },
   // Surfaced if an advance is somehow rejected at the engine (forged id, illegal
   // transition, or a target outside the printer-permitted subset).
   errorRejected: {
