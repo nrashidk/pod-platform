@@ -105,5 +105,22 @@ const UI = {
   },
 } satisfies Record<string, Bi>;
 
+// Packing slip (queue 9): printed, merchant-branded. Static labels only — the
+// merchant's own message/return address are shown exactly as the merchant wrote.
+const SLIP = {
+  title: { en: "Packing slip", ar: "قسيمة التعبئة" },
+  print: { en: "Print", ar: "طباعة" },
+  shipTo: { en: "Ship to", ar: "الشحن إلى" },
+  orderRef: { en: "Order", ar: "الطلب" },
+  items: { en: "Items in this parcel", ar: "محتويات هذا الطرد" },
+  item: { en: "Item", ar: "المنتج" },
+  options: { en: "Size / colour", ar: "المقاس / اللون" },
+  qty: { en: "Qty", ar: "الكمية" },
+  returnAddress: { en: "Return address", ar: "عنوان الإرجاع" },
+  open: { en: "Packing slip", ar: "قسيمة التعبئة" },
+} satisfies Record<string, Bi>;
+export const slipT = (key: keyof typeof SLIP, locale: Locale): string =>
+  pick(SLIP[key], locale);
+
 export type UiKey = keyof typeof UI;
 export const t = (key: UiKey, locale: Locale): string => pick(UI[key], locale);

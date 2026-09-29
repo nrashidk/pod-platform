@@ -18,6 +18,7 @@ import {
   methodLabel,
   placementLabel,
   shipT,
+  slipT,
   t,
 } from "./labels";
 import { advanceAction, firstArticlePhotoAction } from "./actions";
@@ -238,6 +239,19 @@ export default async function PrinterPage({
                       ))}
                     </ul>
                   </div>
+
+                  {f.status !== "REROUTED" && f.status !== "CANCELLED" && (
+                    <div className="mt-3">
+                      <a
+                        href={`/printer/packing-slip/${encodeURIComponent(f.id)}?lang=${locale}`}
+                        target="_blank"
+                        rel="noopener"
+                        className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-100"
+                      >
+                        {slipT("open", locale)}
+                      </a>
+                    </div>
+                  )}
 
                   {/* First-article photo proof (bulk): shown whenever a photo can be
                       uploaded — including while awaiting approval, when there is
