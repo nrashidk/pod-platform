@@ -14,6 +14,7 @@ import {
   submitFirstArticle,
   FirstArticleRequiredError,
   InvalidTransitionError,
+  parseProofOfDelivery,
 } from "@/lib/fulfillment";
 import { recordDispatchHold } from "@/lib/printer-hold";
 import { requireRole } from "@/lib/auth-context";
@@ -36,8 +37,21 @@ export async function advanceAction(formData: FormData) {
     redirect(`/ops?lang=${lang}`);
   }
 
+  // DELIVERED starts the 30-day claim window, so it needs a proof-of-delivery
+  // reference (queue 11): refuse without one, before touching the engine.
+  const proofOfDelivery =
+    toStatus === "DELIVERED"
+      ? parseProofOfDelivery(formData.get("proofOfDelivery"))
+      : null;
+  if (toStatus === "DELIVERED" && !proofOfDelivery) {
+    revalidatePath("/ops");
+    redirect(`/ops?lang=${lang}&err=${fulfillmentId}&why=pod`);
+  }
+
   try {
-    await advanceFulfillment(fulfillmentId, toStatus);
+    await advanceFulfillment(fulfillmentId, toStatus, {
+      ...(proofOfDelivery ? { proofOfDelivery } : {}),
+    });
     // SHIPPED hook — layered on top of the lifecycle engine (not inside it),
     // exactly as recordOrderBilling is called beside createOrderWithRouting. On
     // a BULK fulfillment this splits the printer ledger 70/30; sub-threshold is

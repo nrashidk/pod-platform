@@ -9,7 +9,7 @@ import Link from "next/link";
 import type { FulfillmentStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth-context";
 import { getOrdersForCaller } from "@/lib/orders-access";
-import { nextFulfillmentStatus } from "@/lib/fulfillment";
+import { nextFulfillmentStatus, POD_REFERENCE_MAX } from "@/lib/fulfillment";
 import { firstArticlePhotoViewUrl } from "@/lib/first-article-photo";
 import { getDirection, type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/locale";
@@ -35,7 +35,7 @@ function money(value: { toString(): string }, currency: string): string {
 export default async function OpsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lang?: string; err?: string }>;
+  searchParams: Promise<{ lang?: string; err?: string; why?: string }>;
 }) {
   // DATA-LAYER GATE (not middleware): this page is OPERATOR-only. requireRole
   // reads the session server-side and redirects anyone who isn't a signed-in
@@ -183,6 +183,13 @@ export default async function OpsPage({
                                 <span className="font-mono" dir="ltr">
                                   {f.shipments[0].tracking_number ?? shipT("notEntered", locale)}
                                 </span>
+                                {f.shipments[0].proof_of_delivery_url && (
+                                  <>
+                                    {" · "}
+                                    {shipT("proof", locale)}:{" "}
+                                    <span dir="ltr">{f.shipments[0].proof_of_delivery_url}</span>
+                                  </>
+                                )}
                               </p>
                             )}
 
@@ -298,6 +305,29 @@ export default async function OpsPage({
                                     </form>
                                   )}
                                 </div>
+                              ) : next === "DELIVERED" ? (
+                                <form action={advanceAction} className="flex flex-wrap items-end gap-2">
+                                  <input type="hidden" name="fulfillmentId" value={f.id} />
+                                  <input type="hidden" name="toStatus" value="DELIVERED" />
+                                  <input type="hidden" name="lang" value={locale} />
+                                  <label className="flex flex-col gap-1 text-sm text-gray-700">
+                                    {shipT("proofField", locale)}
+                                    <input
+                                      type="text"
+                                      name="proofOfDelivery"
+                                      required
+                                      maxLength={POD_REFERENCE_MAX}
+                                      dir="ltr"
+                                      className="w-72 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                                    />
+                                  </label>
+                                  <button
+                                    type="submit"
+                                    className="inline-flex items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
+                                  >
+                                    {shipT("markDelivered", locale)}
+                                  </button>
+                                </form>
                               ) : (
                                 <form action={advanceAction}>
                                   <input
@@ -327,7 +357,9 @@ export default async function OpsPage({
 
                               {showError && (
                                 <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                                  {t("errorInvalidTransition", locale)}
+                                  {sp.why === "pod"
+                                    ? shipT("proofRequired", locale)
+                                    : t("errorInvalidTransition", locale)}
                                 </p>
                               )}
                             </div>

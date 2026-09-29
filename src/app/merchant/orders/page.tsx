@@ -137,6 +137,13 @@ export default async function MerchantOrdersPage({
                               <span className="font-mono" dir="ltr">
                                 {f.shipments[0].tracking_number ?? shipT("notEntered", locale)}
                               </span>
+                              {f.shipments[0].proof_of_delivery_url && (
+                                <>
+                                  {" · "}
+                                  {shipT("proof", locale)}:{" "}
+                                  <span dir="ltr">{f.shipments[0].proof_of_delivery_url}</span>
+                                </>
+                              )}
                             </p>
                           )}
 

@@ -228,6 +228,20 @@ export function parseShipmentDetails(
   return { carrier: c, trackingNumber: t };
 }
 
+/** Longest proof-of-delivery reference we store (form input is untrusted). */
+export const POD_REFERENCE_MAX = 300;
+
+/**
+ * Trim and validate a proof-of-delivery reference (courier signature reference,
+ * receipt number or a link to the courier's delivery confirmation). Returns null
+ * when empty or longer than POD_REFERENCE_MAX — the ops DELIVERED action refuses
+ * to mark delivery without one (queue 11).
+ */
+export function parseProofOfDelivery(reference: unknown): string | null {
+  const r = typeof reference === "string" ? reference.trim() : "";
+  return r && r.length <= POD_REFERENCE_MAX ? r : null;
+}
+
 export interface AdvanceOptions {
   /**
    * Timestamp used for the DELIVERED stamp (delivered_at + claim window).
@@ -254,6 +268,13 @@ export interface AdvanceOptions {
    * requires it before calling.
    */
   shipment?: ShipmentDetails;
+
+  /**
+   * Proof-of-delivery reference recorded on the Shipment at DELIVERED (stored in
+   * Shipment.proof_of_delivery_url). Optional at this layer (older callers omit
+   * it); the ops DELIVERED action requires it before calling.
+   */
+  proofOfDelivery?: string;
 }
 
 /**
@@ -328,6 +349,9 @@ export async function advanceFulfillment(
           data: {
             delivered_at: deliveredAt,
             claim_window_closes_at: claimWindowClosesAt,
+            ...(opts.proofOfDelivery
+              ? { proof_of_delivery_url: opts.proofOfDelivery }
+              : {}),
           },
         });
       } else {
@@ -336,6 +360,7 @@ export async function advanceFulfillment(
             fulfillmentId,
             delivered_at: deliveredAt,
             claim_window_closes_at: claimWindowClosesAt,
+            proof_of_delivery_url: opts.proofOfDelivery ?? null,
           },
         });
       }
