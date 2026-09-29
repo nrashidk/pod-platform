@@ -10,6 +10,8 @@ import { redirect } from "next/navigation";
 import type { FulfillmentStatus } from "@prisma/client";
 import {
   advanceFulfillment,
+  decideFirstArticle,
+  submitFirstArticle,
   FirstArticleRequiredError,
   InvalidTransitionError,
 } from "@/lib/fulfillment";
@@ -52,6 +54,39 @@ export async function advanceAction(formData: FormData) {
       e instanceof FirstArticleRequiredError ||
       e instanceof InvalidTransitionError
     ) {
+      revalidatePath("/ops");
+      redirect(`/ops?lang=${lang}&err=${fulfillmentId}`);
+    }
+    throw e;
+  }
+
+  revalidatePath("/ops");
+  redirect(`/ops?lang=${lang}`);
+}
+
+// First-article step for a bulk fulfillment: "SUBMIT" (printer made the proof
+// unit) / "APPROVE" / "REJECT" (back to the printer). Same authorization and
+// stale-POST handling as advanceAction.
+export async function firstArticleAction(formData: FormData) {
+  await requireRole("OPERATOR");
+
+  const fulfillmentId = String(formData.get("fulfillmentId") ?? "");
+  const step = String(formData.get("step") ?? "");
+  const langRaw = String(formData.get("lang") ?? "en");
+  const lang: Locale = isLocale(langRaw) ? langRaw : "en";
+
+  if (
+    !fulfillmentId ||
+    (step !== "SUBMIT" && step !== "APPROVE" && step !== "REJECT")
+  ) {
+    redirect(`/ops?lang=${lang}`);
+  }
+
+  try {
+    if (step === "SUBMIT") await submitFirstArticle(fulfillmentId);
+    else await decideFirstArticle(fulfillmentId, step);
+  } catch (e) {
+    if (e instanceof InvalidTransitionError) {
       revalidatePath("/ops");
       redirect(`/ops?lang=${lang}&err=${fulfillmentId}`);
     }

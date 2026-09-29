@@ -55,6 +55,20 @@ const UI = {
     en: "Blocked: first-article approval required before production (bulk order).",
     ar: "محجوب: يلزم اعتماد العيّنة الأولى قبل الإنتاج (طلب بكمية كبيرة).",
   },
+  // Bulk first-article controls (submit proof unit → approve / send back).
+  firstArticleSubmit: {
+    en: "Mark first article produced",
+    ar: "تسجيل إنتاج العيّنة الأولى",
+  },
+  firstArticleApprove: { en: "Approve first article", ar: "اعتماد العيّنة الأولى" },
+  firstArticleReject: {
+    en: "Reject — printer re-makes it",
+    ar: "رفض — تعيد المطبعة إنتاجها",
+  },
+  firstArticleAwaiting: {
+    en: "First article produced — awaiting your approval against the print file.",
+    ar: "تم إنتاج العيّنة الأولى — بانتظار اعتمادك مقارنةً بملف الطباعة.",
+  },
   // Surfaced only if an advance is somehow attempted against the lifecycle rules.
   errorInvalidTransition: {
     en: "That transition isn't allowed from the current status.",
