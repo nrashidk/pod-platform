@@ -14,6 +14,10 @@
 // Production guards from doc §219 "Prevention":
 //   • Bulk Fulfillments (is_bulk) cannot enter IN_PRODUCTION until the
 //     mandatory first article has been approved (first_article_approved_at set).
+//     The path through that gate is a side branch, driven by
+//     submitFirstArticle / decideFirstArticle (below):
+//       ROUTED → FIRST_ARTICLE_PENDING → FIRST_ARTICLE_APPROVED → IN_PRODUCTION
+//                                      ↘ (rejected) ROUTED, printer re-makes it
 //
 // Delivery (doc §185, §574-577): proof of delivery — recorded on a Shipment —
 // STARTS the 30-day defect-claim window. So the DELIVERED transition
@@ -51,6 +55,8 @@ const LIFECYCLE: FulfillmentStatus[] = [
  */
 const ALLOWED_NEXT: Record<string, FulfillmentStatus[]> = {
   ROUTED: ["IN_PRODUCTION"],
+  // Bulk only: reached via decideFirstArticle("APPROVE"); then production may start.
+  FIRST_ARTICLE_APPROVED: ["IN_PRODUCTION"],
   IN_PRODUCTION: ["SHIPPED"],
   SHIPPED: ["DELIVERED"],
   DELIVERED: ["CLOSED"],
@@ -321,5 +327,70 @@ export async function advanceFulfillment(
       include: { shipments: true },
     });
     return { fulfillment: updated, orderStatus };
+  });
+}
+
+/**
+ * Bulk first-article step 1: the printer has produced the single proof unit, so
+ * the Fulfillment waits for approval. ROUTED → FIRST_ARTICLE_PENDING, bulk only
+ * (doc §219: the first article is mandatory on bulk, and only on bulk).
+ */
+export async function submitFirstArticle(fulfillmentId: string) {
+  return firstArticleStep(fulfillmentId, "ROUTED", "FIRST_ARTICLE_PENDING", true);
+}
+
+/**
+ * Bulk first-article step 2: the operator judges the proof unit against the
+ * locked print file. APPROVE → FIRST_ARTICLE_APPROVED and stamps
+ * first_article_approved_at (the value the IN_PRODUCTION gate checks).
+ * REJECT → back to ROUTED with no stamp, so the printer must make a new proof
+ * unit; the gate stays closed.
+ */
+export async function decideFirstArticle(
+  fulfillmentId: string,
+  decision: "APPROVE" | "REJECT"
+) {
+  return firstArticleStep(
+    fulfillmentId,
+    "FIRST_ARTICLE_PENDING",
+    decision === "APPROVE" ? "FIRST_ARTICLE_APPROVED" : "ROUTED",
+    false
+  );
+}
+
+async function firstArticleStep(
+  fulfillmentId: string,
+  from: FulfillmentStatus,
+  to: FulfillmentStatus,
+  requireBulk: boolean
+) {
+  return prisma.$transaction(async (tx) => {
+    const f = await tx.fulfillment.findUniqueOrThrow({
+      where: { id: fulfillmentId },
+    });
+    if (f.status !== from || (requireBulk && !f.is_bulk)) {
+      throw new InvalidTransitionError(f.status, to);
+    }
+    // Conditional write: a concurrent decision on the same row loses cleanly.
+    const { count } = await tx.fulfillment.updateMany({
+      where: { id: fulfillmentId, status: from },
+      data: {
+        status: to,
+        first_article_approved_at:
+          to === "FIRST_ARTICLE_APPROVED" ? new Date() : null,
+      },
+    });
+    if (count !== 1) throw new InvalidTransitionError(f.status, to);
+
+    const siblings = await tx.fulfillment.findMany({
+      where: { orderId: f.orderId },
+      select: { status: true },
+    });
+    const orderStatus = computeOrderStatus(siblings.map((s) => s.status));
+    await tx.order.update({
+      where: { id: f.orderId },
+      data: { status: orderStatus },
+    });
+    return { orderStatus };
   });
 }

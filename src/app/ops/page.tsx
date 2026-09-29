@@ -19,7 +19,7 @@ import {
   orderStatusLabel,
   t,
 } from "./labels";
-import { advanceAction } from "./actions";
+import { advanceAction, firstArticleAction } from "./actions";
 
 // Always render fresh data — advances mutate state between requests.
 export const dynamic = "force-dynamic";
@@ -192,7 +192,38 @@ export default async function OpsPage({
 
                             {/* Advance control */}
                             <div className="mt-3">
-                              {next == null ? (
+                              {f.status === "FIRST_ARTICLE_PENDING" ? (
+                                <div className="flex flex-col gap-2">
+                                  <p className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                                    <span aria-hidden>⏳</span>
+                                    {t("firstArticleAwaiting", locale)}
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(["APPROVE", "REJECT"] as const).map((step) => (
+                                      <form key={step} action={firstArticleAction}>
+                                        <input type="hidden" name="fulfillmentId" value={f.id} />
+                                        <input type="hidden" name="step" value={step} />
+                                        <input type="hidden" name="lang" value={locale} />
+                                        <button
+                                          type="submit"
+                                          className={
+                                            step === "APPROVE"
+                                              ? "inline-flex items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
+                                              : "inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                                          }
+                                        >
+                                          {t(
+                                            step === "APPROVE"
+                                              ? "firstArticleApprove"
+                                              : "firstArticleReject",
+                                            locale
+                                          )}
+                                        </button>
+                                      </form>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : next == null ? (
                                 <p className="text-sm text-gray-400">
                                   {t("noFurther", locale)}
                                 </p>
@@ -211,6 +242,19 @@ export default async function OpsPage({
                                     <span aria-hidden>⏳</span>
                                     {t("blockedFirstArticle", locale)}
                                   </p>
+                                  {f.status === "ROUTED" && (
+                                    <form action={firstArticleAction}>
+                                      <input type="hidden" name="fulfillmentId" value={f.id} />
+                                      <input type="hidden" name="step" value="SUBMIT" />
+                                      <input type="hidden" name="lang" value={locale} />
+                                      <button
+                                        type="submit"
+                                        className="inline-flex items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
+                                      >
+                                        {t("firstArticleSubmit", locale)}
+                                      </button>
+                                    </form>
+                                  )}
                                 </div>
                               ) : (
                                 <form action={advanceAction}>
