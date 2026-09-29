@@ -70,7 +70,7 @@ async function main() {
       ],
     });
   const row = (id: string) => prisma.fulfillment.findUniqueOrThrow({ where: { id } });
-  const jpg = (n = 100) => ({ buffer: Buffer.alloc(n, 1), filename: "proof.jpg", contentType: "image/jpeg" });
+  const jpg = (n = 100) => ({ buffer: Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(Math.max(n - 3, 0), 1)]).subarray(0, n), filename: "proof.jpg", contentType: "image/jpeg" });
 
   const bulk = (await place(30)).fulfillments[0];
   check("fixture is bulk", bulk.is_bulk === true);
@@ -84,6 +84,13 @@ async function main() {
     "wrong content type refused",
     await rejects(
       () => submitFirstArticleWithPhoto(bulk.id, owner, { ...jpg(), contentType: "application/pdf" }, store),
+      FirstArticlePhotoInvalidError
+    )
+  );
+  check(
+    "bytes that are not the claimed image type refused",
+    await rejects(
+      () => submitFirstArticleWithPhoto(bulk.id, owner, { buffer: Buffer.from("<html>not an image</html>"), filename: "x.png", contentType: "image/png" }, store),
       FirstArticlePhotoInvalidError
     )
   );
@@ -127,6 +134,13 @@ async function main() {
     replaced.status === "FIRST_ARTICLE_PENDING" && replaced.first_article_photo_url !== firstUrl
   );
 
+  await decideFirstArticle(bulk.id, "REJECT");
+  const rejected = await row(bulk.id);
+  check(
+    "reject clears the photo so it cannot be shown for the next proof",
+    rejected.status === "ROUTED" && rejected.first_article_photo_url == null && rejected.first_article_photo_uploaded_at == null
+  );
+  await submitFirstArticleWithPhoto(bulk.id, owner, jpg(), store);
   await decideFirstArticle(bulk.id, "APPROVE");
   check(
     "no upload after approval",

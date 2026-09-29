@@ -113,10 +113,13 @@ export async function firstArticlePhotoAction(formData: FormData) {
       contentType: photo.type,
     });
   } catch (e) {
+    if (e instanceof FirstArticlePhotoInvalidError) {
+      revalidatePath("/printer");
+      redirect(`/printer?lang=${lang}&err=${fulfillmentId}&why=photo-${e.reason}`);
+    }
     if (
       e instanceof FulfillmentOwnershipError ||
-      e instanceof InvalidTransitionError ||
-      e instanceof FirstArticlePhotoInvalidError
+      e instanceof InvalidTransitionError
     ) {
       revalidatePath("/printer");
       redirect(`/printer?lang=${lang}&err=${fulfillmentId}`);

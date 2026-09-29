@@ -378,6 +378,10 @@ async function firstArticleStep(
         status: to,
         first_article_approved_at:
           to === "FIRST_ARTICLE_APPROVED" ? new Date() : null,
+        // A rejected proof unit's photo must not be shown against the next proof.
+        ...(to === "ROUTED"
+          ? { first_article_photo_url: null, first_article_photo_uploaded_at: null }
+          : {}),
       },
     });
     if (count !== 1) throw new InvalidTransitionError(f.status, to);

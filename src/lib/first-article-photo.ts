@@ -23,10 +23,29 @@ export const FIRST_ARTICLE_PHOTO_TYPES = [
 /** Kept under the 4.5 MB serverless request-body ceiling. */
 export const FIRST_ARTICLE_PHOTO_MAX_BYTES = 4 * 1024 * 1024;
 
+export type FirstArticlePhotoReason = "type" | "size" | "empty";
+
 export class FirstArticlePhotoInvalidError extends Error {
-  constructor(reason: "type" | "size" | "empty") {
+  readonly reason: FirstArticlePhotoReason;
+  constructor(reason: FirstArticlePhotoReason) {
     super(`First-article photo rejected: ${reason}`);
     this.name = "FirstArticlePhotoInvalidError";
+    this.reason = reason;
+  }
+}
+
+// The browser-claimed content type is not trusted: the bytes must carry the
+// matching JPEG / PNG / WebP signature.
+function matchesSignature(contentType: string, b: Buffer): boolean {
+  switch (contentType) {
+    case "image/jpeg":
+      return b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+    case "image/png":
+      return b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    case "image/webp":
+      return b.length > 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP";
+    default:
+      return false;
   }
 }
 
@@ -41,6 +60,9 @@ export async function submitFirstArticleWithPhoto(
     throw new FirstArticlePhotoInvalidError("size");
   }
   if (!(FIRST_ARTICLE_PHOTO_TYPES as readonly string[]).includes(file.contentType)) {
+    throw new FirstArticlePhotoInvalidError("type");
+  }
+  if (!matchesSignature(file.contentType, file.buffer)) {
     throw new FirstArticlePhotoInvalidError("type");
   }
 
