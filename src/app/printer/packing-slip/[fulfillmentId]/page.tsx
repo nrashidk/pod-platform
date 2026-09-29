@@ -8,6 +8,7 @@ import { requireRole } from "@/lib/auth-context";
 import { getPackingSlipForPrinter } from "@/lib/packing-slip";
 import { getDirection, type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/locale";
+import { localizedBrandText } from "@/lib/merchant-brand";
 import { PrintButton } from "@/components/print-button";
 import { slipT } from "../../labels";
 
@@ -34,6 +35,16 @@ export default async function PackingSlipPage({
   if (!slip) notFound();
 
   const { order } = slip;
+  const slipMessage = localizedBrandText(
+    order.merchant.packing_slip_message,
+    order.merchant.packing_slip_message_ar,
+    locale
+  );
+  const returnAddress = localizedBrandText(
+    order.merchant.return_address,
+    order.merchant.return_address_ar,
+    locale
+  );
   const sep = locale === "ar" ? "، " : ", ";
   const cityLine = [order.shipping_city, order.shipping_emirate, order.shipping_country]
     .filter(Boolean)
@@ -114,19 +125,19 @@ export default async function PackingSlipPage({
           </table>
         </section>
 
-        {order.merchant.packing_slip_message && (
+        {slipMessage && (
           <section className="mt-8 whitespace-pre-line rounded-md border border-gray-200 p-4">
-            {order.merchant.packing_slip_message}
+            {slipMessage}
           </section>
         )}
 
-        {order.merchant.return_address && (
+        {returnAddress && (
           <section className="mt-6">
             <h2 className="text-sm font-semibold text-gray-500">
               {slipT("returnAddress", locale)}
             </h2>
             <p className="mt-1 whitespace-pre-line">
-              {order.merchant.return_address}
+              {returnAddress}
             </p>
           </section>
         )}

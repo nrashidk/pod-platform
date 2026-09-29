@@ -36,7 +36,7 @@ export class FirstArticlePhotoInvalidError extends Error {
 
 // The browser-claimed content type is not trusted: the bytes must carry the
 // matching JPEG / PNG / WebP signature.
-function matchesSignature(contentType: string, b: Buffer): boolean {
+export function matchesSignature(contentType: string, b: Buffer): boolean {
   switch (contentType) {
     case "image/jpeg":
       return b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;

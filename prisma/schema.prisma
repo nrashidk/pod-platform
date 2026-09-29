@@ -348,6 +348,10 @@ model Merchant {
   packing_slip_message String?
   return_address      String?
   custom_packaging_note String?
+  // Arabic variants (queue 10). The un-suffixed columns above are the English
+  // text; a null _ar falls back to the English one wherever it is shown.
+  packing_slip_message_ar String?
+  return_address_ar       String?
 
   wallet        Wallet?
   stores        StoreConnection[]

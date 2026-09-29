@@ -37,7 +37,9 @@ export async function getPackingSlipForPrinter(
             select: {
               name: true,
               packing_slip_message: true,
+              packing_slip_message_ar: true,
               return_address: true,
+              return_address_ar: true,
             },
           },
         },
