@@ -64,7 +64,7 @@ Built and covered by smoke tests (verified by reading the code):
 | 8 | **Printer work view.** Printer sees, per fulfillment: the validated print file(s) (short-lived private URL), ship-to address, and the brand to apply. Ownership-scoped. | DM §4, §6; recon | 7 | done (PR #15) |
 | 9 | **White-label packing slip.** Bilingual printable packing slip per fulfillment carrying the merchant's brand (logo, message, return address), no platform/printer branding. | DM §6 | 8 | done (PR #16) |
 | 10 | **Merchant brand settings.** Merchant edits own brand assets (logo upload, packing-slip message EN/AR, return address, packaging note). | DM §1 Merchant, §6 | 9 | done (PR #17) |
-| 10b | **Show the merchant logo on the packing slip and printer page.** Ownership-scoped signed-link route for the printer (like queue 8's print-file route); slip draws the logo, printer page stops showing the raw reference. | queue 10 review | 10 | done (PR #TBD) |
+| 10b | **Show the merchant logo on the packing slip and printer page.** Ownership-scoped signed-link route for the printer (like queue 8's print-file route); slip draws the logo, printer page stops showing the raw reference. | queue 10 review | 10 | done (PR #18) |
 | 11 | **Proof of delivery.** Record POD (photo/reference) when marking DELIVERED; delivery starts the 30-day claim window (already computed). | DM §3, §4 | 7 | todo |
 | 12 | **Estimated delivery.** Add `Printer.production_lead_days` (default, additive migration) + a per-destination shipping-days table with defaults; set `Fulfillment.estimated_delivery` at routing; show it. | DM §1 Printer, §4 | 5 | todo |
 | 13 | **Bleed check** in print-file validation (`PrintArea.bleed_mm`), with bilingual merchant-facing flag copy. | DM §2 | — | todo |
