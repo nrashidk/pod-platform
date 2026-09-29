@@ -22,6 +22,10 @@ import {
   InvalidTransitionError,
   PRINTER_ADVANCE_TARGETS,
 } from "@/lib/fulfillment";
+import {
+  FirstArticlePhotoInvalidError,
+  submitFirstArticleWithPhoto,
+} from "@/lib/first-article-photo";
 import { recordDispatchHold } from "@/lib/printer-hold";
 import { requireRole } from "@/lib/auth-context";
 import { isLocale, type Locale } from "@/lib/i18n";
@@ -85,5 +89,45 @@ export async function advanceAction(formData: FormData) {
   }
 
   revalidatePath("/printer");
+  redirect(`/printer?lang=${lang}`);
+}
+
+// Printer uploads the first-article photo (bulk only); this also submits the
+// first article for ops approval. Same role + ownership gates as advanceAction.
+export async function firstArticlePhotoAction(formData: FormData) {
+  const ctx = await requireRole("PRINTER");
+
+  const fulfillmentId = String(formData.get("fulfillmentId") ?? "");
+  const langRaw = String(formData.get("lang") ?? "en");
+  const lang: Locale = isLocale(langRaw) ? langRaw : "en";
+  const photo = formData.get("photo");
+
+  if (!fulfillmentId || !ctx.printerId || !(photo instanceof File)) {
+    redirect(`/printer?lang=${lang}&err=${fulfillmentId}`);
+  }
+
+  try {
+    await submitFirstArticleWithPhoto(fulfillmentId, ctx.printerId, {
+      buffer: Buffer.from(await photo.arrayBuffer()),
+      filename: photo.name || "photo",
+      contentType: photo.type,
+    });
+  } catch (e) {
+    if (e instanceof FirstArticlePhotoInvalidError) {
+      revalidatePath("/printer");
+      redirect(`/printer?lang=${lang}&err=${fulfillmentId}&why=photo-${e.reason}`);
+    }
+    if (
+      e instanceof FulfillmentOwnershipError ||
+      e instanceof InvalidTransitionError
+    ) {
+      revalidatePath("/printer");
+      redirect(`/printer?lang=${lang}&err=${fulfillmentId}`);
+    }
+    throw e;
+  }
+
+  revalidatePath("/printer");
+  revalidatePath("/ops");
   redirect(`/printer?lang=${lang}`);
 }

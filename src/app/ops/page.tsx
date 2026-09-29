@@ -10,6 +10,7 @@ import type { FulfillmentStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth-context";
 import { getOrdersForCaller } from "@/lib/orders-access";
 import { nextFulfillmentStatus } from "@/lib/fulfillment";
+import { firstArticlePhotoViewUrl } from "@/lib/first-article-photo";
 import { getDirection, type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/locale";
 import { LogoutButton } from "@/components/logout-button";
@@ -49,6 +50,19 @@ export default async function OpsPage({
   // Fetch through the scoped accessor (OPERATOR ⇒ all orders). Routing every
   // read through the authorization layer keeps the gate and the query together.
   const orders = await getOrdersForCaller(ctx);
+
+  // Signed read links for first-article photos awaiting a decision (private store).
+  const photoLinks = new Map<string, string | null>();
+  for (const o of orders) {
+    for (const f of o.fulfillments) {
+      if (f.status === "FIRST_ARTICLE_PENDING") {
+        photoLinks.set(
+          f.id,
+          await firstArticlePhotoViewUrl(f.first_article_photo_url)
+        );
+      }
+    }
+  }
 
   return (
     <div dir={dir} lang={locale} className="min-h-screen bg-gray-50 text-gray-900">
@@ -198,6 +212,20 @@ export default async function OpsPage({
                                     <span aria-hidden>⏳</span>
                                     {t("firstArticleAwaiting", locale)}
                                   </p>
+                                  {photoLinks.get(f.id) ? (
+                                    <a
+                                      href={photoLinks.get(f.id) ?? undefined}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="w-fit text-sm font-medium text-blue-700 underline"
+                                    >
+                                      {t("firstArticlePhotoView", locale)}
+                                    </a>
+                                  ) : (
+                                    <p className="text-sm text-gray-500">
+                                      {t("firstArticleNoPhoto", locale)}
+                                    </p>
+                                  )}
                                   <div className="flex flex-wrap gap-2">
                                     {(["APPROVE", "REJECT"] as const).map((step) => (
                                       <form key={step} action={firstArticleAction}>
