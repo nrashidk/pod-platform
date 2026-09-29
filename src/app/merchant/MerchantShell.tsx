@@ -10,12 +10,13 @@ import { getDirection } from "@/lib/i18n";
 import { LogoutButton } from "@/components/logout-button";
 import { t } from "./labels";
 
-export type MerchantNav = "dashboard" | "orders" | "designs";
+export type MerchantNav = "dashboard" | "orders" | "designs" | "brand";
 
-const NAV: { key: MerchantNav; href: string; labelKey: "navDashboard" | "navOrders" | "navDesigns" }[] = [
+const NAV: { key: MerchantNav; href: string; labelKey: "navDashboard" | "navOrders" | "navDesigns" | "navBrand" }[] = [
   { key: "dashboard", href: "/merchant", labelKey: "navDashboard" },
   { key: "orders", href: "/merchant/orders", labelKey: "navOrders" },
   { key: "designs", href: "/merchant/designs", labelKey: "navDesigns" },
+  { key: "brand", href: "/merchant/brand", labelKey: "navBrand" },
 ];
 
 export function MerchantShell({

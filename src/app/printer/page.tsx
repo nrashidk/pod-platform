@@ -12,6 +12,7 @@ import { getFulfillmentsForPrinter } from "@/lib/orders-access";
 import { nextPrinterStatus } from "@/lib/fulfillment";
 import { getDirection, type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/locale";
+import { localizedBrandText } from "@/lib/merchant-brand";
 import { LogoutButton } from "@/components/logout-button";
 import {
   fulfillmentStatusLabel,
@@ -183,11 +184,19 @@ export default async function PrinterPage({
                           />
                           <BrandRow
                             label={t("brandMessage", locale)}
-                            value={f.order.merchant.packing_slip_message}
+                            value={localizedBrandText(
+                              f.order.merchant.packing_slip_message,
+                              f.order.merchant.packing_slip_message_ar,
+                              locale
+                            )}
                           />
                           <BrandRow
                             label={t("brandReturn", locale)}
-                            value={f.order.merchant.return_address}
+                            value={localizedBrandText(
+                              f.order.merchant.return_address,
+                              f.order.merchant.return_address_ar,
+                              locale
+                            )}
                           />
                           <BrandRow
                             label={t("brandPackaging", locale)}
@@ -387,7 +396,9 @@ type BrandFields = {
   name: string;
   brand_logo_url: string | null;
   packing_slip_message: string | null;
+  packing_slip_message_ar: string | null;
   return_address: string | null;
+  return_address_ar: string | null;
   custom_packaging_note: string | null;
 };
 
@@ -397,7 +408,9 @@ function brandIsEmpty(m: BrandFields): boolean {
   return !(
     m.brand_logo_url ||
     m.packing_slip_message ||
+    m.packing_slip_message_ar ||
     m.return_address ||
+    m.return_address_ar ||
     m.custom_packaging_note
   );
 }

@@ -39,6 +39,7 @@ const UI = {
   navDashboard: { en: "Dashboard", ar: "لوحة التحكم" },
   navOrders: { en: "Orders", ar: "الطلبات" },
   navDesigns: { en: "Designs", ar: "التصاميم" },
+  navBrand: { en: "Brand", ar: "العلامة التجارية" },
   skipToContent: { en: "Skip to content", ar: "تخطَّ إلى المحتوى" },
 
   // ── Dashboard home ──

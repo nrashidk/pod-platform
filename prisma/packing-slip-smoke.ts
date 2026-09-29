@@ -31,6 +31,8 @@ async function main() {
       email: EMAIL,
       packing_slip_message: "Thank you from TEST Slip",
       return_address: "5 Return Rd, Dubai",
+      packing_slip_message_ar: "شكرًا من TEST Slip",
+      return_address_ar: "5 شارع الإرجاع، دبي",
     },
   });
   const type = await prisma.productType.findUniqueOrThrow({ where: { slug: "test-tshirt" } });
@@ -63,6 +65,11 @@ async function main() {
     slip?.order.merchant.name === "TEST Slip Merchant" &&
       slip.order.merchant.packing_slip_message === "Thank you from TEST Slip" &&
       slip.order.merchant.return_address === "5 Return Rd, Dubai"
+  );
+  check(
+    "slip carries the Arabic message + return address variants (queue 10)",
+    slip?.order.merchant.packing_slip_message_ar === "شكرًا من TEST Slip" &&
+      slip.order.merchant.return_address_ar === "5 شارع الإرجاع، دبي"
   );
   check(
     "slip carries ship-to and the parcel's items (EN + AR names, variant, qty)",
