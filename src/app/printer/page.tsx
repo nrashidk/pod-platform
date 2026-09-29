@@ -216,7 +216,9 @@ export default async function PrinterPage({
                             </span>
                           )}
                           {d.placements.map((p) =>
-                            p.validation_status === "PASSED" ? (
+                            p.validation_status === "PASSED" &&
+                            f.status !== "REROUTED" &&
+                            f.status !== "CANCELLED" ? (
                               <a
                                 key={p.id}
                                 href={`/api/printer/work-file?fulfillmentId=${encodeURIComponent(f.id)}&designId=${encodeURIComponent(d.id)}&placement=${p.placement}`}

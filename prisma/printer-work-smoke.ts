@@ -125,6 +125,16 @@ async function main() {
       placements.find((p) => p.placement === "BACK")?.validation_status === "FLAGGED"
   );
 
+  check(
+    "work view hides the buyer's retail total and payment fields",
+    mine != null && !("retail_total" in mine.order) && !("paid_at" in mine.order)
+  );
+
+  await prisma.fulfillment.update({ where: { id: f.id }, data: { status: "REROUTED" } });
+  check(
+    "rerouted work no longer serves files",
+    (await printerWorkFileUrl(printerId, target, store)) === null
+  );
   await prisma.fulfillment.update({ where: { id: f.id }, data: { status: "CANCELLED" } });
   check(
     "cancelled work no longer serves files",
