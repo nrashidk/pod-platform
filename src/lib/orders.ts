@@ -5,8 +5,10 @@
 // across Fulfillments by the capability-matrix router. Implements the
 // assignment side of /docs/pod-platform-data-model.md §"Routing algorithm":
 //
-//   1. Each line is routed via findEligiblePrinters (capability gate →
-//      capacity gate → cost-primary → proximity tiebreak). Top survivor wins.
+//   1. Lines are grouped by capability (product type + method) and each GROUP
+//      is routed on its total quantity via findEligiblePrinters (capability
+//      gate → capacity gate → cost-primary → proximity tiebreak). The top
+//      survivor takes every line of the group whole.
 //   2. Lines whose top printer is the SAME printer collapse into ONE
 //      Fulfillment (fewer parcels, fewer shipping fees, fewer defect surfaces —
 //      doc §159). Lines routed to DIFFERENT printers split into separate
@@ -150,8 +152,11 @@ export async function planRoutedOrder(input: CreateOrderInput): Promise<RoutedOr
   });
   const typeByProduct = new Map(products.map((p) => [p.id, p.productTypeId]));
 
-  // ── (1) ROUTE each line; (2) pick the top-ranked eligible printer. ──
-  const routed: RoutedLine[] = [];
+  // ── (1) GROUP lines by required capability (productType + method); (2) route
+  // each GROUP on its total quantity — min/max qty, capacity and pricing tier are
+  // judged on the group total, not per line (data model §3 step 1); (3) the
+  // top-ranked eligible printer takes every line of the group whole (tier 1).
+  const lineGroups = new Map<string, { productTypeId: string; lines: CreateOrderLineInput[] }>();
   for (const line of input.lines) {
     const productTypeId = typeByProduct.get(line.productId);
     if (!productTypeId) {
@@ -159,15 +164,25 @@ export async function planRoutedOrder(input: CreateOrderInput): Promise<RoutedOr
         `createOrderWithRouting: unknown productId ${line.productId}`
       );
     }
+    const key = `${productTypeId}|${line.method}`;
+    const g = lineGroups.get(key);
+    if (g) g.lines.push(line);
+    else lineGroups.set(key, { productTypeId, lines: [line] });
+  }
+
+  const routed: RoutedLine[] = [];
+  for (const { productTypeId, lines } of lineGroups.values()) {
+    const method = lines[0].method;
+    const groupQty = lines.reduce((sum, l) => sum + l.quantity, 0);
 
     const eligible = await findEligiblePrinters({
       productTypeId,
-      method: line.method,
-      quantity: line.quantity,
+      method,
+      quantity: groupQty,
       destination: input.destination,
     });
     if (eligible.length === 0) {
-      throw new UnroutableLineError(productTypeId, line.method, line.quantity);
+      throw new UnroutableLineError(productTypeId, method, groupQty);
     }
     const top = eligible[0]; // ranked: cost-primary, proximity tiebreak
 
@@ -178,20 +193,22 @@ export async function planRoutedOrder(input: CreateOrderInput): Promise<RoutedOr
         printerId_productTypeId_method: {
           printerId: top.printerId,
           productTypeId,
-          method: line.method,
+          method,
         },
       },
       select: { id: true },
     });
 
-    routed.push({
-      input: line,
-      productTypeId,
-      printerId: top.printerId,
-      capabilityId: cap?.id ?? null,
-      effectiveUnitCost: top.effectiveUnitCost,
-      lineCost: top.totalCost,
-    });
+    for (const line of lines) {
+      routed.push({
+        input: line,
+        productTypeId,
+        printerId: top.printerId,
+        capabilityId: cap?.id ?? null,
+        effectiveUnitCost: top.effectiveUnitCost,
+        lineCost: top.effectiveUnitCost * line.quantity,
+      });
+    }
   }
 
   // ── (3) GROUP routed lines by chosen printer → one Fulfillment per printer.
@@ -276,8 +293,9 @@ export async function persistRoutedOrder(
       },
     });
     // Capacity accounting (queue 5): reserve the units in the same transaction.
-    // Routing gates each line on its own; the reserve checks the group total, so
-    // a lost race or several lines on one printer can still overflow here. That
+    // Routing gates each capability group on its own total; the reserve checks the
+    // printer's whole Fulfillment (all its groups), so a lost race or several
+    // groups on one printer can still overflow here. That
     // is "no eligible printer" for the order, same as a pre-check failure.
     const groupUnits = fp.lines.reduce((sum, l) => sum + l.input.quantity, 0);
     try {
