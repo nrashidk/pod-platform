@@ -91,6 +91,16 @@ const SHIP = {
   carrier: { en: "Carrier", ar: "شركة الشحن" },
   tracking: { en: "Tracking number", ar: "رقم التتبّع" },
   notEntered: { en: "Not entered", ar: "لم يُدخل" },
+  proof: { en: "Proof of delivery", ar: "إثبات التسليم" },
+  proofField: {
+    en: "Proof of delivery (courier reference or link)",
+    ar: "إثبات التسليم (مرجع شركة الشحن أو رابط)",
+  },
+  markDelivered: { en: "Mark delivered", ar: "تأكيد التسليم" },
+  proofRequired: {
+    en: "Enter a proof-of-delivery reference to mark this delivered.",
+    ar: "أدخل مرجع إثبات التسليم لتأكيد التسليم.",
+  },
 } satisfies Record<string, Bi>;
 export const shipT = (key: keyof typeof SHIP, locale: Locale): string =>
   pick(SHIP[key], locale);

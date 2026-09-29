@@ -14,6 +14,8 @@ import {
   submitFirstArticle,
   FirstArticleRequiredError,
   InvalidTransitionError,
+  parseProofOfDelivery,
+  ProofOfDeliveryRequiredError,
 } from "@/lib/fulfillment";
 import { recordDispatchHold } from "@/lib/printer-hold";
 import { requireRole } from "@/lib/auth-context";
@@ -36,8 +38,18 @@ export async function advanceAction(formData: FormData) {
     redirect(`/ops?lang=${lang}`);
   }
 
+  // DELIVERED starts the 30-day claim window, so the engine is told to require
+  // a proof-of-delivery reference (queue 11); missing/invalid → notice below.
+  const proofOfDelivery =
+    toStatus === "DELIVERED"
+      ? parseProofOfDelivery(formData.get("proofOfDelivery"))
+      : null;
+
   try {
-    await advanceFulfillment(fulfillmentId, toStatus);
+    await advanceFulfillment(fulfillmentId, toStatus, {
+      requireProofOfDelivery: true,
+      ...(proofOfDelivery ? { proofOfDelivery } : {}),
+    });
     // SHIPPED hook — layered on top of the lifecycle engine (not inside it),
     // exactly as recordOrderBilling is called beside createOrderWithRouting. On
     // a BULK fulfillment this splits the printer ledger 70/30; sub-threshold is
@@ -46,6 +58,10 @@ export async function advanceAction(formData: FormData) {
       await recordDispatchHold(fulfillmentId);
     }
   } catch (e) {
+    if (e instanceof ProofOfDeliveryRequiredError) {
+      revalidatePath("/ops");
+      redirect(`/ops?lang=${lang}&err=${fulfillmentId}&why=pod`);
+    }
     // The page renders the bulk first-article BLOCK proactively (disabled
     // control), so the gate is normally never hit here. This catch is the
     // fallback for a stale/forged advance: surface a per-fulfillment notice
