@@ -31,6 +31,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { FulfillmentStatus, OrderStatus } from "@prisma/client";
+import { releasePrinterLoad } from "./printer-load";
 import { prisma } from "./prisma";
 
 /** Defect-claim window length (doc §187: "30 days from receipt"). */
@@ -310,6 +311,12 @@ export async function advanceFulfillment(
       where: { id: fulfillmentId },
       data: { status: toStatus },
     });
+
+    // (3b) Leaving the printer's queue frees its capacity, in this same
+    // transaction (queue 5). CANCELLED / REROUTED will call this too (queue 19, 20).
+    if (toStatus === "SHIPPED") {
+      await releasePrinterLoad(tx, fulfillmentId);
+    }
 
     // (4) Recompute the parent Order's composite status from ALL fulfillments.
     const siblings = await tx.fulfillment.findMany({

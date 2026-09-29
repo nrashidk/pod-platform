@@ -16,6 +16,9 @@
 //      Fulfillment carrying its wholesale_cost (Σ of its lines' effective cost)
 //      and the bulk flags derived from that cost.
 //
+// Each Fulfillment also reserves its units on the printer's `current_load_units`
+// in the same transaction (src/lib/printer-load.ts); release happens at SHIPPED.
+//
 // DEFERRED this phase (do NOT add here): payment, wallet money movement,
 // DefectClaim, and the 70/30 hold/retention arithmetic. We set is_bulk and
 // first_article_required (they're routing/production attributes), but leave
@@ -32,6 +35,7 @@
 
 import type { OrderOrigination, Prisma, PrintMethod } from "@prisma/client";
 import { prisma } from "./prisma";
+import { reservePrinterLoad } from "./printer-load";
 import { findEligiblePrinters } from "./routing";
 
 /**
@@ -271,6 +275,13 @@ export async function persistRoutedOrder(
         // engine is deferred this phase.
       },
     });
+    // Capacity accounting (queue 5): reserve the units in the same transaction.
+    await reservePrinterLoad(
+      tx,
+      fp.printerId,
+      fulfillment.id,
+      fp.lines.reduce((sum, l) => sum + l.input.quantity, 0)
+    );
     fulfillments.push({
       id: fulfillment.id,
       printerId: fulfillment.printerId,

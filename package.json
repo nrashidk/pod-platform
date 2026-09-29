@@ -30,8 +30,10 @@
     "test:printer-hold": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/printer-hold-smoke.ts",
     "test:first-article": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/first-article-smoke.ts",
     "test:first-article-photo": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/first-article-photo-smoke.ts",
+    "test:reset-load": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/reset-test-load.ts",
+    "test:printer-load": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/printer-load-smoke.ts",
     "test:locale": "node --experimental-loader ./prisma/resolve-hook.mjs prisma/locale-smoke.ts",
-    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:order-routing && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:printer && npm run test:billing && npm run test:billing-race && npm run test:order-billing-atomic && npm run test:api-intake && npm run test:wallet-topup && npm run test:design-manager && npm run test:printer-hold && npm run test:locale && npm run test:first-article && npm run test:first-article-photo"
+    "test:smoke": "npm run test:seed && npm run test:routing && npm run test:reset-load && npm run test:order-routing && npm run test:reset-load && npm run test:fulfillment-lifecycle && npm run test:print-validation && npm run test:auth && npm run test:reset-load && npm run test:printer && npm run test:reset-load && npm run test:billing && npm run test:reset-load && npm run test:billing-race && npm run test:reset-load && npm run test:order-billing-atomic && npm run test:reset-load && npm run test:api-intake && npm run test:wallet-topup && npm run test:design-manager && npm run test:reset-load && npm run test:printer-hold && npm run test:locale && npm run test:reset-load && npm run test:first-article && npm run test:reset-load && npm run test:first-article-photo && npm run test:reset-load && npm run test:printer-load"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",

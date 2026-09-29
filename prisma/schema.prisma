@@ -611,6 +611,10 @@ model Fulfillment {
   // Estimated delivery shown at checkout = production_lead + shipping_time.
   estimated_delivery_days Int?
 
+  // Units currently reserved on printer.current_load_units for this fulfillment
+  // (set at routing, zeroed on release at SHIPPED/CANCELLED/REROUTED).
+  load_units  Int               @default(0)
+
   // ── Bulk retention (70/30). Bulk = wholesale_cost >= 1000 AED. ──
   is_bulk          Boolean      @default(false)
   hold_status      HoldStatus   @default(NONE)
