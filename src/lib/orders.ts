@@ -16,6 +16,9 @@
 //      Fulfillment carrying its wholesale_cost (Σ of its lines' effective cost)
 //      and the bulk flags derived from that cost.
 //
+// Each Fulfillment also reserves its units on the printer's `current_load_units`
+// in the same transaction (src/lib/printer-load.ts); release happens at SHIPPED.
+//
 // DEFERRED this phase (do NOT add here): payment, wallet money movement,
 // DefectClaim, and the 70/30 hold/retention arithmetic. We set is_bulk and
 // first_article_required (they're routing/production attributes), but leave
@@ -32,6 +35,7 @@
 
 import type { OrderOrigination, Prisma, PrintMethod } from "@prisma/client";
 import { prisma } from "./prisma";
+import { PrinterCapacityError, reservePrinterLoad } from "./printer-load";
 import { findEligiblePrinters } from "./routing";
 
 /**
@@ -271,6 +275,23 @@ export async function persistRoutedOrder(
         // engine is deferred this phase.
       },
     });
+    // Capacity accounting (queue 5): reserve the units in the same transaction.
+    // Routing gates each line on its own; the reserve checks the group total, so
+    // a lost race or several lines on one printer can still overflow here. That
+    // is "no eligible printer" for the order, same as a pre-check failure.
+    const groupUnits = fp.lines.reduce((sum, l) => sum + l.input.quantity, 0);
+    try {
+      await reservePrinterLoad(tx, fp.printerId, fulfillment.id, groupUnits);
+    } catch (e) {
+      if (e instanceof PrinterCapacityError) {
+        throw new UnroutableLineError(
+          fp.lines[0].productTypeId,
+          fp.lines[0].input.method,
+          groupUnits
+        );
+      }
+      throw e;
+    }
     fulfillments.push({
       id: fulfillment.id,
       printerId: fulfillment.printerId,
