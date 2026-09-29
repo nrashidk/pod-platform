@@ -25,6 +25,7 @@ export async function getPackingSlipForPrinter(
       order: {
         select: {
           id: true,
+          external_order_ref: true,
           recipient_name: true,
           recipient_phone: true,
           shipping_line1: true,

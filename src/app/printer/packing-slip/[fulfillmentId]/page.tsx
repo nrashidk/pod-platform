@@ -13,6 +13,10 @@ import { slipT } from "../../labels";
 
 export const dynamic = "force-dynamic";
 
+// The root layout titles every page "POD Platform", and browsers print the page
+// title on paper — override it so the slip carries no platform name.
+export const metadata = { title: " " };
+
 export default async function PackingSlipPage({
   params,
   searchParams,
@@ -69,7 +73,7 @@ export default async function PackingSlipPage({
               {slipT("orderRef", locale)}
             </h2>
             <p className="mt-1 font-mono" dir="ltr">
-              {order.id.slice(-8)}
+              {order.external_order_ref ?? order.id.slice(-8)}
             </p>
           </div>
         </section>

@@ -85,6 +85,10 @@ async function main() {
   );
 
   check(
+    "slip carries the order ref field (store's own number when present)",
+    slip != null && "external_order_ref" in slip.order
+  );
+  check(
     "another printer gets no slip",
     (await getPackingSlipForPrinter("not-the-owner", f.id)) === null
   );
