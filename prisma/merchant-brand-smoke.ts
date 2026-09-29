@@ -72,6 +72,15 @@ async function main() {
     partial.packing_slip_message === "Second" && partial.custom_packaging_note === "Tissue paper"
   );
 
+  const crlf = await updateMerchantBrandText(a.id, {
+    return_address: "line\r\n".repeat(BRAND_TEXT_LIMITS.return_address / 5).trimEnd(),
+  });
+  check(
+    "CRLF line breaks count once and are stored as \\n",
+    !!crlf.return_address && !crlf.return_address.includes("\r")
+  );
+  await updateMerchantBrandText(a.id, { return_address: "1 Return Rd, Dubai" });
+
   check(
     "over-long text is rejected",
     await rejects(

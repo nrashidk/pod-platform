@@ -66,7 +66,9 @@ export async function updateMerchantBrandText(
   for (const field of Object.keys(BRAND_TEXT_LIMITS) as BrandTextField[]) {
     const raw = input[field];
     if (raw === undefined) continue;
-    const v = (raw ?? "").trim();
+    // Browsers submit line breaks as \r\n but count them as one character in
+    // maxLength; normalise so the server cap matches what the form allowed.
+    const v = (raw ?? "").replace(/\r\n?/g, "\n").trim();
     if (v.length > BRAND_TEXT_LIMITS[field]) {
       throw new BrandInvalidError("too_long", field);
     }
