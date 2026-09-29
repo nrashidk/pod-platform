@@ -74,9 +74,49 @@ export async function getOrdersForCaller(ctx: AuthContext) {
 
 // The include shape the printer view renders from: the parent order (for the
 // human-facing ref + currency) and the fulfillment's own lines.
+// Work-view extras (queue 8): the merchant brand to apply, and each line's
+// design placements — id/placement/status only, never the print file URL (the
+// file is fetched through the ownership-checked work-file route).
 const FULFILLMENT_INCLUDE = {
-  order: true,
-  lines: { include: { product: true, variant: true } },
+  // Only what the printer needs to ship + brand: no retail total / payment
+  // fields (the printer is paid wholesale, never sees the buyer's price).
+  order: {
+    select: {
+      id: true,
+      recipient_name: true,
+      recipient_phone: true,
+      shipping_line1: true,
+      shipping_line2: true,
+      shipping_city: true,
+      shipping_emirate: true,
+      shipping_country: true,
+      merchant: {
+        select: {
+          name: true,
+          brand_logo_url: true,
+          packing_slip_message: true,
+          return_address: true,
+          custom_packaging_note: true,
+        },
+      },
+    },
+  },
+  lines: {
+    include: {
+      product: true,
+      variant: true,
+      design: {
+        select: {
+          id: true,
+          name: true,
+          placements: {
+            select: { id: true, placement: true, validation_status: true },
+            orderBy: { placement: "asc" },
+          },
+        },
+      },
+    },
+  },
 } as const;
 
 // Return the Fulfillments assigned to the calling PRINTER — scoped at the query

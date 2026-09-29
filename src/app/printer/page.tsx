@@ -13,7 +13,13 @@ import { nextPrinterStatus } from "@/lib/fulfillment";
 import { getDirection, type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/locale";
 import { LogoutButton } from "@/components/logout-button";
-import { fulfillmentStatusLabel, methodLabel, shipT, t } from "./labels";
+import {
+  fulfillmentStatusLabel,
+  methodLabel,
+  placementLabel,
+  shipT,
+  t,
+} from "./labels";
 import { advanceAction, firstArticlePhotoAction } from "./actions";
 
 // Always render fresh data — advances mutate state between requests.
@@ -123,6 +129,115 @@ export default async function PrinterPage({
                       </li>
                     ))}
                   </ul>
+
+                  {/* Work view (queue 8): ship-to, print files, brand to apply.
+                      Files are links to the ownership-checked work-file route;
+                      the private-store URL never reaches this page. */}
+                  <div className="mt-3 grid gap-3 border-t border-gray-100 pt-3 text-sm text-gray-700 sm:grid-cols-2">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {t("shipTo", locale)}
+                      </h3>
+                      <address className="mt-1 not-italic">
+                        <div>{f.order.recipient_name}</div>
+                        <div>{f.order.shipping_line1}</div>
+                        {f.order.shipping_line2 && (
+                          <div>{f.order.shipping_line2}</div>
+                        )}
+                        <div>
+                          {[
+                            f.order.shipping_city,
+                            f.order.shipping_emirate,
+                            f.order.shipping_country,
+                          ]
+                            .filter(Boolean)
+                            .join(locale === "ar" ? "، " : ", ")}
+                        </div>
+                        {f.order.recipient_phone && (
+                          <div>
+                            {t("phone", locale)}:{" "}
+                            <span dir="ltr">{f.order.recipient_phone}</span>
+                          </div>
+                        )}
+                      </address>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {t("brandHeading", locale)}
+                      </h3>
+                      {brandIsEmpty(f.order.merchant) ? (
+                        <p className="mt-1 text-gray-500">
+                          {t("brandNone", locale)}
+                        </p>
+                      ) : (
+                        <dl className="mt-1 space-y-0.5">
+                          <BrandRow
+                            label={t("brandName", locale)}
+                            value={f.order.merchant.name}
+                          />
+                          <BrandRow
+                            label={t("brandLogo", locale)}
+                            value={f.order.merchant.brand_logo_url}
+                            ltr
+                          />
+                          <BrandRow
+                            label={t("brandMessage", locale)}
+                            value={f.order.merchant.packing_slip_message}
+                          />
+                          <BrandRow
+                            label={t("brandReturn", locale)}
+                            value={f.order.merchant.return_address}
+                          />
+                          <BrandRow
+                            label={t("brandPackaging", locale)}
+                            value={f.order.merchant.custom_packaging_note}
+                          />
+                        </dl>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-sm text-gray-700">
+                    <h3 className="font-semibold text-gray-900">
+                      {t("printFiles", locale)}
+                    </h3>
+                    <ul className="mt-1 space-y-1">
+                      {uniqueDesigns(f.lines).map((d) => (
+                        <li
+                          key={d.id}
+                          className="flex flex-wrap items-center gap-x-3 gap-y-1"
+                        >
+                          <span className="font-medium">
+                            {t("design", locale)}: {d.name}
+                          </span>
+                          {d.placements.length === 0 && (
+                            <span className="text-gray-500">
+                              {t("fileNotReady", locale)}
+                            </span>
+                          )}
+                          {d.placements.map((p) =>
+                            p.validation_status === "PASSED" &&
+                            f.status !== "REROUTED" &&
+                            f.status !== "CANCELLED" ? (
+                              <a
+                                key={p.id}
+                                href={`/api/printer/work-file?fulfillmentId=${encodeURIComponent(f.id)}&designId=${encodeURIComponent(d.id)}&placement=${p.placement}`}
+                                className="rounded-md border border-gray-300 px-2 py-0.5 text-gray-900 hover:bg-gray-100"
+                              >
+                                {placementLabel(p.placement, locale)} ·{" "}
+                                {t("downloadFile", locale)}
+                              </a>
+                            ) : (
+                              <span key={p.id} className="text-gray-500">
+                                {placementLabel(p.placement, locale)} ·{" "}
+                                {t("fileNotReady", locale)}
+                              </span>
+                            )
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
 
                   {/* First-article photo proof (bulk): shown whenever a photo can be
                       uploaded — including while awaiting approval, when there is
@@ -250,6 +365,54 @@ export default async function PrinterPage({
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+type BrandFields = {
+  name: string;
+  brand_logo_url: string | null;
+  packing_slip_message: string | null;
+  return_address: string | null;
+  custom_packaging_note: string | null;
+};
+
+// "No brand assets" = none of the optional brand fields is set (the merchant
+// name alone is not an asset to apply).
+function brandIsEmpty(m: BrandFields): boolean {
+  return !(
+    m.brand_logo_url ||
+    m.packing_slip_message ||
+    m.return_address ||
+    m.custom_packaging_note
+  );
+}
+
+// One design can sit on several lines of a fulfillment; list it once.
+function uniqueDesigns<D extends { id: string }>(
+  lines: { design: D }[]
+): D[] {
+  const seen = new Map<string, D>();
+  for (const l of lines) if (!seen.has(l.design.id)) seen.set(l.design.id, l.design);
+  return [...seen.values()];
+}
+
+function BrandRow({
+  label,
+  value,
+  ltr,
+}: {
+  label: string;
+  value: string | null;
+  ltr?: boolean;
+}) {
+  if (!value) return null;
+  return (
+    <div>
+      <dt className="inline text-gray-500">{label}: </dt>
+      <dd className="inline" dir={ltr ? "ltr" : undefined}>
+        {value}
+      </dd>
     </div>
   );
 }
