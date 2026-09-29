@@ -5,6 +5,7 @@
 
 import type { Locale } from "@/lib/i18n";
 
+export { placementLabel } from "../merchant/designs/labels";
 export {
   fulfillmentStatusLabel,
   methodLabel,
@@ -71,6 +72,26 @@ const UI = {
   photoErrEmpty: {
     en: "The photo file is empty.",
     ar: "ملف الصورة فارغ.",
+  },
+  // Work view (queue 8): what to print, where it ships, whose brand to apply.
+  shipTo: { en: "Ship to", ar: "الشحن إلى" },
+  phone: { en: "Phone", ar: "الهاتف" },
+  printFiles: { en: "Print files", ar: "ملفات الطباعة" },
+  design: { en: "Design", ar: "التصميم" },
+  downloadFile: { en: "Download", ar: "تنزيل" },
+  fileNotReady: { en: "Not validated", ar: "غير معتمد" },
+  brandHeading: {
+    en: "Brand to apply (white-label)",
+    ar: "العلامة التجارية المطلوب تطبيقها (بدون علامة المنصة)",
+  },
+  brandName: { en: "Brand", ar: "العلامة التجارية" },
+  brandLogo: { en: "Logo file", ar: "ملف الشعار" },
+  brandMessage: { en: "Packing-slip message", ar: "رسالة قسيمة التعبئة" },
+  brandReturn: { en: "Return address", ar: "عنوان الإرجاع" },
+  brandPackaging: { en: "Packaging note", ar: "ملاحظة التغليف" },
+  brandNone: {
+    en: "No brand assets set — ship unbranded.",
+    ar: "لم تُحدَّد أصول العلامة التجارية — أرسل بدون علامة.",
   },
   shipmentRequired: {
     en: "Enter the carrier and tracking number before marking as shipped.",
