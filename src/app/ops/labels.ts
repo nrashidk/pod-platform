@@ -84,6 +84,17 @@ const UI = {
   },
 } satisfies Record<string, Bi>;
 
+// Shipment (carrier + tracking) labels, shared by the ops, printer and merchant
+// views (each re-exports shipT / shipmentLabels rather than redefining them).
+const SHIP = {
+  shipment: { en: "Shipment", ar: "الشحنة" },
+  carrier: { en: "Carrier", ar: "شركة الشحن" },
+  tracking: { en: "Tracking number", ar: "رقم التتبّع" },
+  notEntered: { en: "Not entered", ar: "لم يُدخل" },
+} satisfies Record<string, Bi>;
+export const shipT = (key: keyof typeof SHIP, locale: Locale): string =>
+  pick(SHIP[key], locale);
+
 export type UiKey = keyof typeof UI;
 export const t = (key: UiKey, locale: Locale): string => pick(UI[key], locale);
 

@@ -18,6 +18,7 @@ const ORDER_INCLUDE = {
     orderBy: { createdAt: "asc" },
     include: {
       printer: true,
+      shipments: { orderBy: { createdAt: "asc" } },
       lines: { include: { product: true, variant: true } },
     },
   },

@@ -18,6 +18,7 @@ import {
   fulfillmentStatusLabel,
   methodLabel,
   orderStatusLabel,
+  shipT,
   t,
 } from "./labels";
 import { advanceAction, firstArticleAction } from "./actions";
@@ -171,6 +172,19 @@ export default async function OpsPage({
                                 label={fulfillmentStatusLabel(f.status, locale)}
                               />
                             </div>
+
+                            {/* Shipment (carrier + tracking), created at dispatch */}
+                            {f.shipments[0] && (
+                              <p className="mt-2 text-sm text-gray-700">
+                                <span className="font-medium">{shipT("shipment", locale)}:</span>{" "}
+                                {shipT("carrier", locale)}: {f.shipments[0].carrier ?? shipT("notEntered", locale)}
+                                {" · "}
+                                {shipT("tracking", locale)}:{" "}
+                                <span className="font-mono" dir="ltr">
+                                  {f.shipments[0].tracking_number ?? shipT("notEntered", locale)}
+                                </span>
+                              </p>
+                            )}
 
                             {/* Lines */}
                             <ul className="mt-3 space-y-1 border-t border-gray-100 pt-3 text-sm text-gray-700">
