@@ -200,6 +200,7 @@ export default async function PrinterPage({
                                 name="carrier"
                                 required
                                 maxLength={100}
+                                dir="ltr"
                                 className="mt-1 block w-48 rounded-md border border-gray-300 px-2 py-1 text-sm"
                               />
                             </label>
@@ -210,6 +211,7 @@ export default async function PrinterPage({
                                 name="trackingNumber"
                                 required
                                 maxLength={100}
+                                dir="ltr"
                                 className="mt-1 block w-56 rounded-md border border-gray-300 px-2 py-1 text-sm"
                               />
                             </label>
