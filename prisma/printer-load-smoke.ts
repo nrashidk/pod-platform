@@ -61,6 +61,28 @@ async function main() {
         ],
       });
 
+    // ── Two lines on one printer that fit alone but not together: rejected as
+    // unroutable (not a crash), nothing written. ──
+    let multiRejected = false;
+    try {
+      await createOrderWithRouting({
+        merchantId: merchant.id,
+        recipient: { name: "Load Buyer", line1: "1 Test St", city: "Dubai", emirate: "Dubai" },
+        lines: [30, 30].map((quantity) => ({
+          productId: tee.id, variantId: tee.variants[0].id, designId: design.id,
+          method: "DTG" as const, quantity, unit_retail: 79.0,
+        })),
+      });
+    } catch (e) {
+      multiRejected = e instanceof UnroutableLineError;
+    }
+    check("two 30-unit lines on 50 capacity are rejected as unroutable", multiRejected);
+    check(
+      "rejected multi-line order leaves no load or order behind",
+      (await load()) === 0 &&
+        (await prisma.order.count({ where: { merchantId: merchant.id } })) === 0
+    );
+
     // ── Race: two orders of 30 for 50 units of capacity — exactly one wins. ──
     const raced = await Promise.allSettled([place(30), place(30)]);
     check(

@@ -35,7 +35,7 @@
 
 import type { OrderOrigination, Prisma, PrintMethod } from "@prisma/client";
 import { prisma } from "./prisma";
-import { reservePrinterLoad } from "./printer-load";
+import { PrinterCapacityError, reservePrinterLoad } from "./printer-load";
 import { findEligiblePrinters } from "./routing";
 
 /**
@@ -276,12 +276,22 @@ export async function persistRoutedOrder(
       },
     });
     // Capacity accounting (queue 5): reserve the units in the same transaction.
-    await reservePrinterLoad(
-      tx,
-      fp.printerId,
-      fulfillment.id,
-      fp.lines.reduce((sum, l) => sum + l.input.quantity, 0)
-    );
+    // Routing gates each line on its own; the reserve checks the group total, so
+    // a lost race or several lines on one printer can still overflow here. That
+    // is "no eligible printer" for the order, same as a pre-check failure.
+    const groupUnits = fp.lines.reduce((sum, l) => sum + l.input.quantity, 0);
+    try {
+      await reservePrinterLoad(tx, fp.printerId, fulfillment.id, groupUnits);
+    } catch (e) {
+      if (e instanceof PrinterCapacityError) {
+        throw new UnroutableLineError(
+          fp.lines[0].productTypeId,
+          fp.lines[0].input.method,
+          groupUnits
+        );
+      }
+      throw e;
+    }
     fulfillments.push({
       id: fulfillment.id,
       printerId: fulfillment.printerId,
