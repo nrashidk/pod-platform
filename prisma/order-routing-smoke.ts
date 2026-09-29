@@ -6,7 +6,7 @@
 // Idempotent: wipes its own TEST fixtures first. Assumes `npm run db:seed` has
 // already created the TEST product types / printers / capabilities.
 // Run: npm run test:order-routing
-import { createOrderWithRouting } from "../src/lib/orders.ts";
+import { UnroutableLineError, createOrderWithRouting } from "../src/lib/orders.ts";
 import { prisma } from "../src/lib/prisma.ts";
 
 async function cleanup() {
@@ -129,7 +129,64 @@ async function main() {
     if (!pass) ok = false;
   }
 
-  console.log(ok ? "\n✅ PASS — order split correctly into two fulfillments." : "\n❌ FAIL");
+  // ── Tier 1 (queue 6): lines of ONE capability are grouped and routed on the
+  // group total. Business cards need min_qty 50 at HardGoods Co: 30 + 30 = 60
+  // is routable as a group though neither line alone is.
+  const cardType = await prisma.productType.findUniqueOrThrow({
+    where: { slug: "test-business-card" },
+  });
+  const card = await prisma.product.create({
+    data: {
+      productTypeId: cardType.id,
+      name_en: "[TEST] Business Card",
+      name_ar: "[تجريبي] بطاقة عمل",
+      retail_price: 1.5,
+      variants: {
+        create: [
+          { sku: "TEST-CARD-A", size: "std", color: "White" },
+          { sku: "TEST-CARD-B", size: "std", color: "Cream" },
+        ],
+      },
+    },
+    include: { variants: true },
+  });
+  const recipient = { name: "Test Buyer", line1: "1 Test Street", city: "Dubai", emirate: "Dubai" };
+  const cardLine = (i: number, quantity: number) => ({
+    productId: card.id,
+    variantId: card.variants[i].id,
+    designId: design.id,
+    method: "PAPER_PRINT" as const,
+    quantity,
+    unit_retail: 1.5,
+  });
+
+  const grouped = await createOrderWithRouting({
+    merchantId: merchant.id,
+    recipient,
+    lines: [cardLine(0, 30), cardLine(1, 30)],
+  });
+  let underMinRejected = false;
+  try {
+    await createOrderWithRouting({
+      merchantId: merchant.id,
+      recipient,
+      lines: [cardLine(0, 30), cardLine(1, 10)],
+    });
+  } catch (e) {
+    underMinRejected = e instanceof UnroutableLineError;
+  }
+  const groupChecks: Array<[string, boolean]> = [
+    ["same-capability lines (30+30 cards) meet min_qty 50 as a group", grouped.fulfillments.length === 1],
+    ["group fulfillment carries both lines", grouped.fulfillments[0]?.lines.length === 2],
+    ["group cost = 60 × 0.80 = 48", Number(grouped.fulfillments[0]?.wholesale_cost) === 48],
+    ["group total 40 < min_qty 50 is unroutable", underMinRejected],
+  ];
+  for (const [label, pass] of groupChecks) {
+    console.log(`${pass ? "✅" : "❌"} ${label}`);
+    if (!pass) ok = false;
+  }
+
+  console.log(ok ? "\n✅ PASS — order split correctly; capability groups routed whole." : "\n❌ FAIL");
   if (!ok) process.exitCode = 1;
 }
 
