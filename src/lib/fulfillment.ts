@@ -135,6 +135,16 @@ export class FulfillmentOwnershipError extends Error {
   }
 }
 
+/** DELIVERED was attempted, with proof required, and no valid reference given. */
+export class ProofOfDeliveryRequiredError extends Error {
+  readonly fulfillmentId: string;
+  constructor(fulfillmentId: string) {
+    super(`Fulfillment ${fulfillmentId}: proof of delivery is required for DELIVERED.`);
+    this.name = "ProofOfDeliveryRequiredError";
+    this.fulfillmentId = fulfillmentId;
+  }
+}
+
 export class FirstArticleRequiredError extends Error {
   readonly fulfillmentId: string;
   constructor(fulfillmentId: string) {
@@ -275,6 +285,13 @@ export interface AdvanceOptions {
    * it); the ops DELIVERED action requires it before calling.
    */
   proofOfDelivery?: string;
+
+  /**
+   * When true, DELIVERED without a proofOfDelivery reference throws
+   * ProofOfDeliveryRequiredError before any write. The ops action sets it;
+   * other callers omit it (unchanged behaviour).
+   */
+  requireProofOfDelivery?: boolean;
 }
 
 /**
@@ -331,6 +348,14 @@ export async function advanceFulfillment(
       fulfillment.first_article_approved_at == null
     ) {
       throw new FirstArticleRequiredError(fulfillmentId);
+    }
+
+    if (
+      toStatus === "DELIVERED" &&
+      opts.requireProofOfDelivery &&
+      !opts.proofOfDelivery
+    ) {
+      throw new ProofOfDeliveryRequiredError(fulfillmentId);
     }
 
     // (3) DELIVERED: require/create a Shipment, stamp delivery + claim window.

@@ -7,6 +7,7 @@ import {
   advanceFulfillment,
   CLAIM_WINDOW_DAYS,
   parseProofOfDelivery,
+  ProofOfDeliveryRequiredError,
   POD_REFERENCE_MAX,
 } from "../src/lib/fulfillment.ts";
 import { prisma } from "../src/lib/prisma.ts";
@@ -69,8 +70,22 @@ async function main() {
   const before = await prisma.shipment.findFirstOrThrow({ where: { fulfillmentId: f.id } });
   check("no proof recorded before delivery", before.proof_of_delivery_url === null);
 
+  // Required mode (what the ops action uses): refused with nothing written.
+  let refused = false;
+  try {
+    await advanceFulfillment(f.id, "DELIVERED", { requireProofOfDelivery: true });
+  } catch (e) {
+    refused = e instanceof ProofOfDeliveryRequiredError;
+  }
+  const afterRefusal = await prisma.fulfillment.findUniqueOrThrow({ where: { id: f.id } });
+  const shipAfterRefusal = await prisma.shipment.findFirstOrThrow({ where: { fulfillmentId: f.id } });
+  check(
+    "DELIVERED without a reference is refused when required, nothing written",
+    refused && afterRefusal.status === "SHIPPED" && shipAfterRefusal.delivered_at === null
+  );
+
   const deliveredAt = new Date("2026-06-02T00:00:00.000Z");
-  await advanceFulfillment(f.id, "DELIVERED", { deliveredAt, proofOfDelivery: "SIGNED-REF-777" });
+  await advanceFulfillment(f.id, "DELIVERED", { deliveredAt, proofOfDelivery: "SIGNED-REF-777", requireProofOfDelivery: true });
   const ships = await prisma.shipment.findMany({ where: { fulfillmentId: f.id } });
   check("still one Shipment row", ships.length === 1);
   const s = ships[0];
