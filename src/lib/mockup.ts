@@ -199,13 +199,28 @@ export async function generateMockup(input: {
     contentType: "image/png",
   });
 
-  // Re-check the lock in the write itself so an approval landing mid-render
-  // cannot be overwritten.
-  const updated = await prisma.design.updateMany({
-    where: { id: design.id, merchantId, mockup_approved_at: null },
-    data: { mockup_url: stored.url },
+  // Write under the Design row lock (the same lock persistPlacement takes) and
+  // re-check both that the design is still unapproved AND that its PASSED print
+  // files are still exactly the ones rendered — otherwise an upload/approval
+  // landing mid-render could leave (or lock in) a mockup that doesn't match.
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.design.updateMany({
+      where: { id: design.id, merchantId, mockup_approved_at: null },
+      data: { mockup_url: stored.url },
+    });
+    if (updated.count === 0) throw new MockupRejectedError("mockup_locked");
+    const current = await tx.designPlacement.findMany({
+      where: { designId: design.id, validation_status: "PASSED" },
+      select: { placement: true, print_file_url: true },
+    });
+    const key = (r: { placement: string; print_file_url: string | null }) =>
+      `${r.placement}=${r.print_file_url}`;
+    const eligible = current.filter((c) => c.print_file_url && areas.has(c.placement));
+    const same =
+      Math.min(eligible.length, MAX_PANELS) === sources.length &&
+      sources.every((r) => eligible.some((c) => key(c) === key(r)));
+    if (!same) throw new MockupRejectedError("render_failed");
   });
-  if (updated.count === 0) throw new MockupRejectedError("mockup_locked");
 
   return { mockupUrl: stored.url, panels: sources.length };
 }

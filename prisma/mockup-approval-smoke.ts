@@ -130,6 +130,24 @@ async function main() {
       : approveRes.status === "rejected" && fin.mockup_url === null
   );
 
+  // (6) Generate racing a replacing upload: the file changes during the render,
+  // so the finished mockup is stale and must NOT be stored/approvable.
+  const d3 = await createDesign({ merchantId: a.id, name: "APPROVE Stale", productTypeId: tee.id });
+  await up(d3.id, "FRONT");
+  const racing = Object.create(store) as StubPrintFileStore;
+  racing.put = async (f) => {
+    await up(d3.id, "FRONT", true, 33);
+    return store.put(f);
+  };
+  check(
+    "file replaced mid-render → generate refuses",
+    (await code(generateMockup({ merchantId: a.id, designId: d3.id, store: racing }))) === "render_failed"
+  );
+  check("stale mockup never stored", (await row(d3.id)).mockup_url === null);
+  check("stale mockup cannot be approved", (await code(approve(d3.id))) === "no_mockup");
+  await gen(d3.id);
+  check("regenerate after the change → approvable", (await code(approve(d3.id))) === null);
+
   await cleanup();
   let failed = 0;
   for (const [label, pass] of checks) {
