@@ -14,6 +14,7 @@ import { MerchantShell } from "../MerchantShell";
 import { OrderableBadge, DesignStatusBadge } from "../badges";
 import { CreateDesignForm } from "./CreateDesignForm";
 import { UploadPlacementForm } from "./UploadPlacementForm";
+import { GenerateMockupForm } from "./GenerateMockupForm";
 import {
   dt,
   placementLabel,
@@ -167,6 +168,36 @@ export default async function MerchantDesignsPage({
                       </li>
                     ))}
                   </ul>
+                </div>
+
+                {/* Mockup preview (data model §2) — approval-only artifact,
+                    built from PASSED print files. */}
+                <div className="border-t border-hairline px-5 py-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-faint">
+                    {dt("mockupHeading", locale)}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted">{dt("mockupHint", locale)}</p>
+                  {d.hasMockup && (
+                    <a
+                      href={`/api/merchant/designs/mockup?designId=${encodeURIComponent(d.id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-block text-sm font-semibold text-brand-700 underline decoration-brand-700/30 underline-offset-2 hover:text-brand-600"
+                    >
+                      {dt("mockupView", locale)}
+                    </a>
+                  )}
+                  {d.mockupApproved ? (
+                    <p className="mt-2 text-sm text-muted">{dt("mockupLocked", locale)}</p>
+                  ) : d.placements.some((p) => p.status === "PASSED") ? (
+                    <GenerateMockupForm
+                      locale={locale}
+                      designId={d.id}
+                      hasMockup={d.hasMockup}
+                    />
+                  ) : (
+                    <p className="mt-2 text-sm text-muted">{dt("mockupNeedsFile", locale)}</p>
+                  )}
                 </div>
               </li>
             ))}
