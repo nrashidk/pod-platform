@@ -40,7 +40,7 @@ export function validatePodPhoto(file: PodPhotoFile): void {
 }
 
 /**
- * Store the photo on the fulfillment's DELIVERED shipment (attach or replace).
+ * Store the photo on the fulfillment's (first) DELIVERED shipment — the same one the pages read (attach or replace).
  * Refused when the fulfillment has no delivered shipment — the photo is proof
  * OF delivery, so it cannot exist before delivery.
  */
@@ -53,7 +53,7 @@ export async function attachProofOfDeliveryPhoto(
 
   const shipment = await prisma.shipment.findFirst({
     where: { fulfillmentId, delivered_at: { not: null } },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "asc" },
     select: { id: true },
   });
   if (!shipment) throw new PodPhotoInvalidError("notDelivered");
@@ -100,7 +100,7 @@ export async function merchantPodPhotoUrl(
       proof_of_delivery_photo_url: { not: null },
       fulfillment: { order: { merchantId } },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "asc" },
     select: { proof_of_delivery_photo_url: true },
   });
   return podPhotoViewUrl(shipment?.proof_of_delivery_photo_url ?? null, store);

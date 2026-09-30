@@ -94,7 +94,9 @@ export async function advanceAction(formData: FormData) {
       try {
         await attachProofOfDeliveryPhoto(fulfillmentId, podPhoto);
       } catch (e) {
-        if (!(e instanceof PodPhotoInvalidError)) throw e;
+        // Delivery is already recorded; any failure storing the photo (bad file,
+        // store outage) becomes a notice, never a crash after the fact.
+        console.error("proof-of-delivery photo not stored", e);
         photoFailed = true;
       }
     }
@@ -140,9 +142,14 @@ export async function podPhotoAction(formData: FormData) {
   } catch (e) {
     if (e instanceof PodPhotoInvalidError) {
       revalidatePath("/ops");
-      redirect(`/ops?lang=${lang}&err=${fulfillmentId}&why=podphoto`);
+      // Not-delivered is a stale/forged POST: the generic notice, not "bad file".
+      redirect(
+        `/ops?lang=${lang}&err=${fulfillmentId}` +
+          (e.reason === "notDelivered" ? "" : "&why=podphoto")
+      );
     }
-    throw e;
+    console.error("proof-of-delivery photo not stored", e);
+    redirect(`/ops?lang=${lang}&err=${fulfillmentId}&why=podphoto`);
   }
   revalidatePath("/ops");
   revalidatePath("/merchant/orders");
