@@ -11,6 +11,7 @@ import { requireRole } from "@/lib/auth-context";
 import { getOrdersForCaller } from "@/lib/orders-access";
 import { nextFulfillmentStatus, POD_REFERENCE_MAX } from "@/lib/fulfillment";
 import { firstArticlePhotoViewUrl } from "@/lib/first-article-photo";
+import { podPhotoViewUrl } from "@/lib/proof-of-delivery-photo";
 import { getDirection, type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/locale";
 import { LogoutButton } from "@/components/logout-button";
@@ -21,7 +22,7 @@ import {
   shipT,
   t,
 } from "./labels";
-import { advanceAction, firstArticleAction } from "./actions";
+import { advanceAction, firstArticleAction, podPhotoAction } from "./actions";
 
 // Always render fresh data — advances mutate state between requests.
 export const dynamic = "force-dynamic";
@@ -54,8 +55,12 @@ export default async function OpsPage({
 
   // Signed read links for first-article photos awaiting a decision (private store).
   const photoLinks = new Map<string, string | null>();
+  // Same for proof-of-delivery photos (queue 11b).
+  const podLinks = new Map<string, string | null>();
   for (const o of orders) {
     for (const f of o.fulfillments) {
+      const podPhoto = f.shipments[0]?.proof_of_delivery_photo_url;
+      if (podPhoto) podLinks.set(f.id, await podPhotoViewUrl(podPhoto));
       if (f.status === "FIRST_ARTICLE_PENDING") {
         photoLinks.set(
           f.id,
@@ -193,6 +198,48 @@ export default async function OpsPage({
                               </p>
                             )}
 
+                            {/* Proof-of-delivery photo: view + attach/replace (queue 11b) */}
+                            {f.shipments[0]?.delivered_at && (
+                              <div className="mt-2 flex flex-wrap items-end gap-3 text-sm text-gray-700">
+                                <span className="font-medium">{shipT("proofPhoto", locale)}:</span>
+                                {podLinks.get(f.id) ? (
+                                  <a
+                                    href={podLinks.get(f.id) ?? undefined}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline underline-offset-2"
+                                  >
+                                    {shipT("proofPhotoView", locale)}
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-500">{shipT("notEntered", locale)}</span>
+                                )}
+                                <form action={podPhotoAction} className="flex flex-wrap items-end gap-2">
+                                  <input type="hidden" name="fulfillmentId" value={f.id} />
+                                  <input type="hidden" name="lang" value={locale} />
+                                  <input
+                                    type="file"
+                                    name="podPhoto"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    required
+                                    aria-label={shipT("proofPhotoField", locale)}
+                                    className="block text-sm text-gray-600 file:me-3 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white"
+                                  />
+                                  <button
+                                    type="submit"
+                                    className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                                  >
+                                    {shipT(
+                                      f.shipments[0].proof_of_delivery_photo_url
+                                        ? "proofPhotoReplace"
+                                        : "proofPhotoAttach",
+                                      locale
+                                    )}
+                                  </button>
+                                </form>
+                              </div>
+                            )}
+
                             {/* Lines */}
                             <ul className="mt-3 space-y-1 border-t border-gray-100 pt-3 text-sm text-gray-700">
                               {f.lines.map((l) => (
@@ -321,6 +368,15 @@ export default async function OpsPage({
                                       className="w-72 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
                                     />
                                   </label>
+                                  <label className="flex flex-col gap-1 text-sm text-gray-700">
+                                    {shipT("proofPhotoField", locale)}
+                                    <input
+                                      type="file"
+                                      name="podPhoto"
+                                      accept="image/jpeg,image/png,image/webp"
+                                      className="block text-sm text-gray-600 file:me-3 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white"
+                                    />
+                                  </label>
                                   <button
                                     type="submit"
                                     className="inline-flex items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
@@ -359,7 +415,11 @@ export default async function OpsPage({
                                 <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
                                   {sp.why === "pod"
                                     ? shipT("proofRequired", locale)
-                                    : t("errorInvalidTransition", locale)}
+                                    : sp.why === "podphoto"
+                                      ? shipT("proofPhotoBad", locale)
+                                      : sp.why === "podphotolate"
+                                        ? shipT("proofPhotoLate", locale)
+                                        : t("errorInvalidTransition", locale)}
                                 </p>
                               )}
                             </div>

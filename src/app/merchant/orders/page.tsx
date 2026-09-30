@@ -144,6 +144,19 @@ export default async function MerchantOrdersPage({
                                   <span dir="ltr">{f.shipments[0].proof_of_delivery_url}</span>
                                 </>
                               )}
+                              {f.shipments[0].proof_of_delivery_photo_url && (
+                                <>
+                                  {" · "}
+                                  <a
+                                    href={`/api/merchant/pod-photo?fulfillmentId=${encodeURIComponent(f.id)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline underline-offset-2"
+                                  >
+                                    {shipT("proofPhotoView", locale)}
+                                  </a>
+                                </>
+                              )}
                             </p>
                           )}
 
