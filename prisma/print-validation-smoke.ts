@@ -10,6 +10,7 @@ import {
   toDesignPlacementValidation,
   type PrintAreaSpec,
 } from "../src/lib/print-file-validation.ts";
+import { friendlyReason } from "../src/app/merchant/designs/labels.ts";
 import { StubPrintFileStore } from "../src/lib/print-file-store.ts";
 
 // ── Specs — mirror prisma/seed.mjs PrintArea rows (kept in sync by hand) ──
@@ -25,7 +26,8 @@ const TSHIRT_FRONT: PrintAreaSpec = {
   requires_transparency: true,
   max_file_mb: 200,
 };
-// Mug WRAP: 203×95mm, 300 DPI min, PNG/JPEG, no transparency requirement.
+// Mug WRAP: 203×95mm trim + 3mm bleed each side, 300 DPI min, PNG/JPEG, no
+// transparency requirement. Needs ≥2469×1193px (trim 2398×1122 + bleed).
 const MUG_WRAP: PrintAreaSpec = {
   placement: "WRAP",
   width_mm: 203,
@@ -36,6 +38,7 @@ const MUG_WRAP: PrintAreaSpec = {
   color_profile: "sRGB",
   requires_transparency: false,
   max_file_mb: 100,
+  bleed_mm: 3,
 };
 
 // ── In-memory image generation ──
@@ -67,6 +70,7 @@ type Case = {
   img: ImgOpts;
   filename: string;
   expect: "PASSED" | "FLAGGED";
+  expectReason?: string; // substring one reason must contain
 };
 
 const cases: Case[] = [
@@ -97,6 +101,52 @@ const cases: Case[] = [
     img: { width: 2500, height: 1200, format: "JPEG", alpha: false, density: 300 },
     filename: "mug-wrap-good.jpg",
     expect: "PASSED",
+  },
+  {
+    label: "Mug WRAP — fills trim (2400×1140) but no room for 3mm bleed",
+    spec: MUG_WRAP,
+    img: { width: 2400, height: 1140, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-no-bleed.jpg",
+    expect: "FLAGGED",
+    expectReason: "bleed missing",
+  },
+  {
+    label: "Mug WRAP — exactly trim + bleed (2469×1193)",
+    spec: MUG_WRAP,
+    img: { width: 2469, height: 1193, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-exact-bleed.jpg",
+    expect: "PASSED",
+  },
+  {
+    label: "Mug WRAP — one pixel short of bleed height (2469×1192)",
+    spec: MUG_WRAP,
+    img: { width: 2469, height: 1192, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-short-bleed.jpg",
+    expect: "FLAGGED",
+    expectReason: "bleed missing",
+  },
+  {
+    label: "Mug WRAP — bleed ignored when spec has none (2400×1140, bleed 0)",
+    spec: { ...MUG_WRAP, bleed_mm: 0 },
+    img: { width: 2400, height: 1140, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-no-bleed-spec.jpg",
+    expect: "PASSED",
+  },
+  {
+    label: "Mug WRAP — 1.5mm bleed, fills trim but not bleed (2400×1140)",
+    spec: { ...MUG_WRAP, bleed_mm: 1.5 },
+    img: { width: 2400, height: 1140, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-frac-bleed.jpg",
+    expect: "FLAGGED",
+    expectReason: "1.5mm bleed",
+  },
+  {
+    label: "Mug WRAP — too narrow for trim (2000×1200) keeps generic reason",
+    spec: MUG_WRAP,
+    img: { width: 2000, height: 1200, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-narrow.jpg",
+    expect: "FLAGGED",
+    expectReason: "too small for WRAP print area (needs ≥2469×1193px",
   },
   {
     label: "Mug WRAP — GIF (format not allowed)",
@@ -136,7 +186,9 @@ async function main() {
 
     const result = await validatePrintFile({ buffer, filename: c.filename }, c.spec);
     const mapped = toDesignPlacementValidation(result);
-    const ok = result.status === c.expect;
+    const ok =
+      result.status === c.expect &&
+      (!c.expectReason || result.reasons.some((r) => r.includes(c.expectReason!)));
     if (ok) pass++;
 
     console.log(`\n■ ${c.label}`);
@@ -148,6 +200,21 @@ async function main() {
     );
     console.log(`  expect:  ${c.expect}`);
     console.log(`  result:  ${result.status} ${ok ? "✓" : "✗ MISMATCH"}`);
+    if (c.expectReason?.includes("bleed")) {
+      // The merchant-facing copy must recognise the reason in both languages
+      // (not fall through verbatim) and keep the exact pixel figures.
+      const raw = result.reasons.find((r) => r.startsWith("bleed missing"));
+      for (const loc of ["en", "ar"] as const) {
+        const friendly = raw ? friendlyReason(raw, loc) : "";
+        const fine =
+          !!raw && friendly !== raw && friendly.includes(" × ");
+        if (!fine) {
+          console.log(`  ✗ friendlyReason(${loc}) did not translate: ${friendly}`);
+          pass--;
+          break;
+        }
+      }
+    }
     if (result.reasons.length) {
       result.reasons.forEach((r) => console.log(`            - ${r}`));
     }

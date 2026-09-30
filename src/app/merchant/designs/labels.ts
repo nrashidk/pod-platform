@@ -217,6 +217,19 @@ export function friendlyReason(reason: string, locale: Locale): string {
       : `This image is too small to print sharply at full product size. A ${p} print needs an image of at least ${reqW} × ${reqH} pixels — yours is ${w} × ${h}. Ask your designer for a print-resolution file, or re-export your design at a larger size.`;
   }
 
+  // Enough pixels for the trim size, but no room for the bleed margin.
+  if (
+    (m = reason.match(
+      /^bleed missing: (\d+)×(\d+)px leaves no room for ([\d.]+)mm bleed on each side of (\w+) \(needs ≥(\d+)×(\d+)px at (\d+) DPI\)$/
+    ))
+  ) {
+    const [, w, h, bleed, place, reqW, reqH] = m;
+    const p = placementWord(place, locale);
+    return locale === "ar"
+      ? `ملفك يغطي مساحة الطباعة لكن دون هامش الزيادة (Bleed). تحتاج طباعة «${p}» إلى تمديد التصميم ${bleed} ملم خارج حافة القص من كل جهة، أي صورة لا تقل عن ${reqW} × ${reqH} بكسل — أما صورتك فهي ${w} × ${h}. مدّد الخلفية أو الصورة إلى الحافة الخارجية وأعد التصدير.`
+      : `Your file fills the print area but has no bleed margin. A ${p} print needs the artwork to extend ${bleed} mm past the trim edge on every side — an image of at least ${reqW} × ${reqH} pixels; yours is ${w} × ${h}. Extend your background or image to the outer edge and re-export.`;
+  }
+
   // Embedded print resolution (DPI) too low.
   if ((m = reason.match(/^DPI (\d+) below minimum (\d+)$/))) {
     const [, got, min] = m;

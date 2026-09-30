@@ -18,7 +18,7 @@ import { prisma } from "./prisma";
 import {
   validatePrintFile,
   toDesignPlacementValidation,
-  requiredPixels,
+  requiredPixelsWithBleed,
   type PrintAreaSpec,
 } from "./print-file-validation";
 import type { PrintFileStore, PrintFilePut } from "./print-file-store";
@@ -56,6 +56,7 @@ function toSpec(area: {
   color_profile: string;
   requires_transparency: boolean;
   max_file_mb: number;
+  bleed_mm: number;
 }): PrintAreaSpec {
   return {
     placement: area.placement,
@@ -67,6 +68,7 @@ function toSpec(area: {
     color_profile: area.color_profile,
     requires_transparency: area.requires_transparency,
     max_file_mb: area.max_file_mb,
+    bleed_mm: area.bleed_mm,
   };
 }
 
@@ -408,6 +410,7 @@ export async function listMyDesigns(merchantId: string): Promise<DesignView[]> {
               width_mm: true,
               height_mm: true,
               min_dpi: true,
+              bleed_mm: true,
             },
           },
         },
@@ -434,8 +437,8 @@ export async function listMyDesigns(merchantId: string): Promise<DesignView[]> {
         print_file_url: existing?.print_file_url ?? null,
         max_file_mb: area.max_file_mb,
         allowed_formats: area.allowed_formats,
-        min_width_px: requiredPixels(area.width_mm, area.min_dpi),
-        min_height_px: requiredPixels(area.height_mm, area.min_dpi),
+        min_width_px: requiredPixelsWithBleed(area.width_mm, area.min_dpi, area.bleed_mm),
+        min_height_px: requiredPixelsWithBleed(area.height_mm, area.min_dpi, area.bleed_mm),
       };
     });
     return {
