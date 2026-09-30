@@ -10,6 +10,7 @@ export {
   fulfillmentStatusLabel,
   methodLabel,
   shipT,
+  daysText,
 } from "../ops/labels";
 
 // Design placement/orderability status labels (PASSED/FLAGGED/PENDING/NONE) live
