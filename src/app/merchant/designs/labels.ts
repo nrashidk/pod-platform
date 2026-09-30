@@ -68,6 +68,37 @@ const UI = {
   statusPending: { en: "Pending", ar: "قيد الانتظار" },
   statusNone: { en: "No file", ar: "لا يوجد ملف" },
 
+  // Mockup preview
+  mockupHeading: { en: "Mockup preview", ar: "معاينة المجسّم" },
+  mockupHint: {
+    en: "A preview of your design on the product, built from your passed print files. It is for approval only — it is not what gets printed. Placeholder product images are used for now.",
+    ar: "معاينة لتصميمك على المنتج، مبنية من ملفات الطباعة المقبولة. هي للاعتماد فقط وليست ما تتم طباعته. تُستخدم حاليًا صور منتجات تجريبية.",
+  },
+  mockupNeedsFile: {
+    en: "Upload at least one print file that passes validation to generate a mockup.",
+    ar: "ارفع ملف طباعة واحدًا على الأقل يجتاز التحقق لإنشاء المعاينة.",
+  },
+  mockupGenerate: { en: "Generate mockup", ar: "إنشاء المعاينة" },
+  mockupRegenerate: { en: "Regenerate mockup", ar: "إعادة إنشاء المعاينة" },
+  mockupPending: { en: "Generating…", ar: "جارٍ الإنشاء…" },
+  mockupView: { en: "View mockup", ar: "عرض المعاينة" },
+  mockupLocked: {
+    en: "This mockup has been approved and is locked.",
+    ar: "تم اعتماد هذه المعاينة وهي مقفلة.",
+  },
+  errMockupNothing: {
+    en: "No passed print file to build a mockup from yet.",
+    ar: "لا يوجد ملف طباعة مقبول لإنشاء المعاينة منه بعد.",
+  },
+  errMockupLocked: {
+    en: "This mockup is approved and can't be changed.",
+    ar: "هذه المعاينة معتمدة ولا يمكن تغييرها.",
+  },
+  errMockupRender: {
+    en: "The mockup couldn't be built from your file. Please try again or re-upload it.",
+    ar: "تعذّر إنشاء المعاينة من ملفك. حاول مجددًا أو أعد رفعه.",
+  },
+
   // Errors
   errNoName: { en: "Enter a design name.", ar: "أدخل اسم التصميم." },
   errNoProductType: { en: "Choose a product type.", ar: "اختر نوع المنتج." },
@@ -291,6 +322,22 @@ export function createErrorKey(kind: string): UiKey {
       return "errNoName";
     case "no_product_type":
       return "errNoProductType";
+    default:
+      return "errGeneric";
+  }
+}
+
+// Map a mockup-action reject code to a label key.
+export function mockupErrorKey(kind: string): UiKey {
+  switch (kind) {
+    case "nothing_to_render":
+      return "errMockupNothing";
+    case "mockup_locked":
+      return "errMockupLocked";
+    case "render_failed":
+      return "errMockupRender";
+    case "design_not_found":
+      return "errDesignNotFound";
     default:
       return "errGeneric";
   }

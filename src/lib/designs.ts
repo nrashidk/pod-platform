@@ -379,6 +379,10 @@ export interface PlacementView {
 export interface DesignView {
   id: string;
   name: string;
+  /** True once a mockup preview has been generated (the URL itself is never
+   * exposed to the browser — it is served via the ownership-gated route). */
+  hasMockup: boolean;
+  mockupApproved: boolean;
   productType: { id: string; name_en: string; name_ar: string };
   orderable: boolean;
   placements: PlacementView[];
@@ -396,6 +400,8 @@ export async function listMyDesigns(merchantId: string): Promise<DesignView[]> {
     select: {
       id: true,
       name: true,
+      mockup_url: true,
+      mockup_approved_at: true,
       productType: {
         select: {
           id: true,
@@ -444,6 +450,8 @@ export async function listMyDesigns(merchantId: string): Promise<DesignView[]> {
     return {
       id: d.id,
       name: d.name,
+      hasMockup: d.mockup_url !== null,
+      mockupApproved: d.mockup_approved_at !== null,
       productType: {
         id: d.productType.id,
         name_en: d.productType.name_en,

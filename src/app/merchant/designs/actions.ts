@@ -17,6 +17,7 @@ import {
   UploadRejectedError,
 } from "@/lib/designs";
 import { getPrintFileStore } from "@/lib/print-file-store";
+import { generateMockup, MockupRejectedError } from "@/lib/mockup";
 
 export interface CreateDesignState {
   errorKind?: string;
@@ -106,6 +107,38 @@ export async function finalizePlacementAction(input: {
       return { errorKind: e.code };
     }
     console.error("finalizePlacementAction failed:", e);
+    return { errorKind: "generic" };
+  }
+}
+
+export interface MockupState {
+  ok?: boolean;
+  errorKind?: string;
+}
+
+// Generate (or regenerate) the preview mockup for one of the merchant's designs.
+// Independent MERCHANT re-check; merchantId comes from the session only.
+export async function generateMockupAction(
+  _prev: MockupState,
+  formData: FormData
+): Promise<MockupState> {
+  const ctx = await requireRole("MERCHANT");
+  if (!ctx.merchantId) return { errorKind: "no_merchant" };
+
+  const designId = String(formData.get("designId") ?? "").trim();
+  if (!designId) return { errorKind: "design_not_found" };
+
+  try {
+    await generateMockup({
+      merchantId: ctx.merchantId,
+      designId,
+      store: getPrintFileStore(),
+    });
+    revalidatePath("/merchant/designs");
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof MockupRejectedError) return { errorKind: e.code };
+    console.error("generateMockupAction failed:", e);
     return { errorKind: "generic" };
   }
 }
