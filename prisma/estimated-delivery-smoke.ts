@@ -59,31 +59,36 @@ async function main() {
     where: { country_emirate: { country: "AE", emirate: "" } },
   });
   const f1 = await order(undefined, null);
-  const lead = f1.printer.production_lead_days;
-  check("uses the printer's production lead days", lead >= 0);
+  // Compare against whichever printer each order was routed to (rotation/tie-breaks
+  // may pick different TEST printers between orders).
+  const leadOf = (f: typeof f1) => f.printer.production_lead_days;
   check(
-    "estimate = production lead + default UAE shipping days",
-    f1.estimated_delivery_days === lead + ae.days
+    "estimate = printer production lead + default UAE shipping days",
+    f1.estimated_delivery_days === leadOf(f1) + ae.days
   );
 
   // Per-emirate override beats the country row.
   await prisma.shippingLeadTime.create({ data: { country: "AE", emirate: OVERRIDE_EMIRATE, days: 9 } });
   const f2 = await order("AE", OVERRIDE_EMIRATE);
-  check("emirate override wins", f2.estimated_delivery_days === lead + 9);
+  check("emirate override wins", f2.estimated_delivery_days === leadOf(f2) + 9);
   const f3 = await order("AE", "Some Other Emirate");
-  check("unknown emirate falls back to the country row", f3.estimated_delivery_days === lead + ae.days);
+  check("unknown emirate falls back to the country row", f3.estimated_delivery_days === leadOf(f3) + ae.days);
 
   // Unknown country → fallback constant.
   const f4 = await order("ZZ", null);
-  check("unknown country uses the fallback days", f4.estimated_delivery_days === lead + FALLBACK_SHIPPING_DAYS);
+  check("unknown country uses the fallback days", f4.estimated_delivery_days === leadOf(f4) + FALLBACK_SHIPPING_DAYS);
 
-  // Lead time change is picked up by new orders.
-  await prisma.printer.update({ where: { id: f1.printerId }, data: { production_lead_days: lead + 4 } });
+  // A changed lead time applies to new orders (raise it on every printer so the
+  // routed one is certain to be affected), and is restored afterwards.
+  const all = await prisma.printer.findMany({ select: { id: true, production_lead_days: true } });
+  await prisma.printer.updateMany({ data: { production_lead_days: 10 } });
   try {
     const f5 = await order(undefined, null);
-    check("a changed production lead time applies to new orders", f5.estimated_delivery_days === lead + 4 + ae.days);
+    check("a changed production lead time applies to new orders", f5.estimated_delivery_days === 10 + ae.days);
   } finally {
-    await prisma.printer.update({ where: { id: f1.printerId }, data: { production_lead_days: lead } });
+    for (const p of all) {
+      await prisma.printer.update({ where: { id: p.id }, data: { production_lead_days: p.production_lead_days } });
+    }
   }
 
   // Labels.
