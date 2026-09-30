@@ -96,6 +96,22 @@ const SHIP = {
     en: "Proof of delivery (courier reference or link)",
     ar: "إثبات التسليم (مرجع شركة الشحن أو رابط)",
   },
+  proofPhoto: { en: "Delivery confirmation photo", ar: "صورة تأكيد التسليم" },
+  proofPhotoView: { en: "View photo", ar: "عرض الصورة" },
+  proofPhotoField: {
+    en: "Photo or scan of the courier's confirmation (optional)",
+    ar: "صورة أو مسح لتأكيد شركة الشحن (اختياري)",
+  },
+  proofPhotoAttach: { en: "Add photo", ar: "إضافة صورة" },
+  proofPhotoReplace: { en: "Replace photo", ar: "استبدال الصورة" },
+  proofPhotoBad: {
+    en: "The photo was not saved: use a JPEG, PNG or WebP image up to 4 MB.",
+    ar: "لم تُحفظ الصورة: استخدم صورة JPEG أو PNG أو WebP بحجم لا يتجاوز 4 ميجابايت.",
+  },
+  proofPhotoLate: {
+    en: "Delivery was recorded, but the photo was not saved: use a JPEG, PNG or WebP image up to 4 MB, and add it again below.",
+    ar: "تم تسجيل التسليم لكن لم تُحفظ الصورة: استخدم صورة JPEG أو PNG أو WebP بحجم لا يتجاوز 4 ميجابايت وأضفها مجدداً أدناه.",
+  },
   markDelivered: { en: "Mark delivered", ar: "تأكيد التسليم" },
   proofRequired: {
     en: "Enter a proof-of-delivery reference to mark this delivered.",

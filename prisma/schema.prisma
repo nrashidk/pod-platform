@@ -655,6 +655,8 @@ model Shipment {
 
   // Proof of delivery STARTS the defect-claim window (not ship date).
   proof_of_delivery_url String?
+  // Optional photo/scan of the courier's delivery confirmation (private Blob store, queue 11b).
+  proof_of_delivery_photo_url String?
   delivered_at  DateTime?
   claim_window_closes_at DateTime? // delivered_at + 30 days
 

@@ -17,9 +17,26 @@ import {
   parseProofOfDelivery,
   ProofOfDeliveryRequiredError,
 } from "@/lib/fulfillment";
+import {
+  attachProofOfDeliveryPhoto,
+  PodPhotoInvalidError,
+  validatePodPhoto,
+  type PodPhotoFile,
+} from "@/lib/proof-of-delivery-photo";
 import { recordDispatchHold } from "@/lib/printer-hold";
 import { requireRole } from "@/lib/auth-context";
 import { isLocale, type Locale } from "@/lib/i18n";
+
+// The optional proof-of-delivery photo from a form; null when none was chosen.
+async function podPhotoFromForm(formData: FormData): Promise<PodPhotoFile | null> {
+  const photo = formData.get("podPhoto");
+  if (!(photo instanceof File) || photo.size === 0) return null;
+  return {
+    buffer: Buffer.from(await photo.arrayBuffer()),
+    filename: photo.name || "photo",
+    contentType: photo.type,
+  };
+}
 
 export async function advanceAction(formData: FormData) {
   // INDEPENDENT authorization re-check. The page already gates rendering, but a
@@ -45,6 +62,22 @@ export async function advanceAction(formData: FormData) {
       ? parseProofOfDelivery(formData.get("proofOfDelivery"))
       : null;
 
+  // A chosen photo is checked BEFORE delivery is recorded, so a bad file never
+  // leaves a half-done step; it is stored right after the delivery is recorded.
+  const podPhoto = toStatus === "DELIVERED" ? await podPhotoFromForm(formData) : null;
+  if (podPhoto) {
+    try {
+      validatePodPhoto(podPhoto);
+    } catch (e) {
+      if (e instanceof PodPhotoInvalidError) {
+        revalidatePath("/ops");
+        redirect(`/ops?lang=${lang}&err=${fulfillmentId}&why=podphoto`);
+      }
+      throw e;
+    }
+  }
+
+  let photoFailed = false;
   try {
     await advanceFulfillment(fulfillmentId, toStatus, {
       requireProofOfDelivery: true,
@@ -56,6 +89,14 @@ export async function advanceAction(formData: FormData) {
     // a no-op. Record-only — no money moves.
     if (toStatus === "SHIPPED") {
       await recordDispatchHold(fulfillmentId);
+    }
+    if (podPhoto) {
+      try {
+        await attachProofOfDeliveryPhoto(fulfillmentId, podPhoto);
+      } catch (e) {
+        if (!(e instanceof PodPhotoInvalidError)) throw e;
+        photoFailed = true;
+      }
     }
   } catch (e) {
     if (e instanceof ProofOfDeliveryRequiredError) {
@@ -77,6 +118,34 @@ export async function advanceAction(formData: FormData) {
   }
 
   revalidatePath("/ops");
+  if (photoFailed) redirect(`/ops?lang=${lang}&err=${fulfillmentId}&why=podphotolate`);
+  redirect(`/ops?lang=${lang}`);
+}
+
+// Attach or replace the proof-of-delivery photo on an already-delivered
+// fulfillment. OPERATOR-only, like every ops action.
+export async function podPhotoAction(formData: FormData) {
+  await requireRole("OPERATOR");
+
+  const fulfillmentId = String(formData.get("fulfillmentId") ?? "");
+  const langRaw = String(formData.get("lang") ?? "en");
+  const lang: Locale = isLocale(langRaw) ? langRaw : "en";
+  const photo = await podPhotoFromForm(formData);
+
+  if (!fulfillmentId || !photo) {
+    redirect(`/ops?lang=${lang}&err=${fulfillmentId}&why=podphoto`);
+  }
+  try {
+    await attachProofOfDeliveryPhoto(fulfillmentId, photo);
+  } catch (e) {
+    if (e instanceof PodPhotoInvalidError) {
+      revalidatePath("/ops");
+      redirect(`/ops?lang=${lang}&err=${fulfillmentId}&why=podphoto`);
+    }
+    throw e;
+  }
+  revalidatePath("/ops");
+  revalidatePath("/merchant/orders");
   redirect(`/ops?lang=${lang}`);
 }
 
