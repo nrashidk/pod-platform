@@ -115,6 +115,26 @@ async function main() {
   const after = (await prisma.design.findUniqueOrThrow({ where: { id: d.id } })).mockup_url;
   check("locked mockup_url unchanged", before === after);
 
+  // (7) Approval landing DURING the render (after the pre-check, before the
+  // write) must not be overwritten: a store whose put() approves the design.
+  const d2 = await createDesign({ merchantId: merchantA.id, name: "MOCKUP Race", productTypeId: tee.id });
+  await upload(d2.id, "FRONT", true);
+  const racing = Object.create(store) as StubPrintFileStore;
+  racing.put = async (f) => {
+    await prisma.design.update({ where: { id: d2.id }, data: { mockup_approved_at: new Date() } });
+    return store.put(f);
+  };
+  check("approval mid-render → mockup_locked", (await rejectCode(generateMockup({ merchantId: merchantA.id, designId: d2.id, store: racing }))) === "mockup_locked");
+  check("mid-render approval leaves mockup_url null", (await prisma.design.findUniqueOrThrow({ where: { id: d2.id } })).mockup_url === null);
+
+  // (8) A stored print file that can't be decoded → render_failed, no url.
+  const d3 = await createDesign({ merchantId: merchantA.id, name: "MOCKUP Broken", productTypeId: tee.id });
+  await upload(d3.id, "FRONT", true);
+  const broken = Object.create(store) as StubPrintFileStore;
+  broken.readBytes = async () => Buffer.from("not an image");
+  check("undecodable file → render_failed", (await rejectCode(generateMockup({ merchantId: merchantA.id, designId: d3.id, store: broken }))) === "render_failed");
+  check("render_failed leaves mockup_url null", (await prisma.design.findUniqueOrThrow({ where: { id: d3.id } })).mockup_url === null);
+
   await cleanup();
   let failed = 0;
   for (const [label, pass] of checks) {
