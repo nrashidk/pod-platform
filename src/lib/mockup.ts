@@ -36,8 +36,10 @@ export type MockupRejectCode =
   | "render_failed"; // a stored print file could not be decoded
 
 export class MockupRejectedError extends Error {
-  constructor(public readonly code: MockupRejectCode) {
+  readonly code: MockupRejectCode;
+  constructor(code: MockupRejectCode) {
     super(code);
+    this.code = code;
     this.name = "MockupRejectedError";
   }
 }
