@@ -52,9 +52,11 @@ export async function POST(req: Request) {
         // for a design THIS merchant owns and a placement that has a print area.
         const design = await prisma.design.findFirst({
           where: { id: designId, merchantId: ctx.merchantId },
-          select: { productTypeId: true },
+          select: { productTypeId: true, mockup_approved_at: true },
         });
         if (!design) throw new Error("design_not_found");
+        // Approved mockup ⇒ print files are locked; mint no token at all.
+        if (design.mockup_approved_at) throw new Error("design_locked");
         const area = await prisma.printArea.findUnique({
           where: {
             productTypeId_placement: {

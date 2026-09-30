@@ -70,7 +70,7 @@ Built and covered by smoke tests (verified by reading the code):
 | 12 | **Estimated delivery.** Add `Printer.production_lead_days` (default, additive migration) + a per-destination shipping-days table with defaults; set `Fulfillment.estimated_delivery` at routing; show it. | DM §1 Printer, §4 | 5 | done (PR #21) |
 | 13 | **Bleed check** in print-file validation (`PrintArea.bleed_mm`), with bilingual merchant-facing flag copy. | DM §2 | — | done (PR #22) |
 | 14 | **Mockup generator.** Render a preview mockup from a design's validated print file onto a per-product-type template (clearly-labelled `[PLACEHOLDER]` product images — owner ruling P12; real photos arrive pre-launch). Uses `sharp` (already a dependency). Stores `mockup_url`. | DM §2, §10 step 2 | 13 | done (PR #23) |
-| 14b | **Mockup approval + lock.** Merchant approves the mockup (timestamped `mockup_approved_at`); approved design's print files become immutable (new version needed to change). | DM §2, §4 | 14 | todo |
+| 14b | **Mockup approval + lock.** Merchant approves the mockup (timestamped `mockup_approved_at`); approved design's print files become immutable (new version needed to change). | DM §2, §4 | 14 | done (PR #24) |
 | 14c | **Order gate on approval.** An order line needs mockup approved AND print files PASSED (ops entry + API intake). Existing API behaviour change → note in PR. | DM §2 rule, §4 | 14b | todo |
 | 15 | **Embroidery digitization step.** For `requires_digitization` capabilities: DIGITIZING state, stitch-file upload + digitization preview, preview becomes the approval artifact for that line. | DM §2 embroidery | 14b, 4 | todo |
 | 16 | **Defect claim photos.** Claim cannot be opened without ≥1 photo (reuse Blob pipeline). | DM §5 | 11 | todo |

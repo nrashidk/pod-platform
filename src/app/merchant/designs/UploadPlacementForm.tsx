@@ -31,6 +31,7 @@ const KNOWN_TOKEN_ERRORS = [
   "bad_content_type",
   "design_not_found",
   "no_print_area",
+  "design_locked",
 ];
 
 export function UploadPlacementForm({

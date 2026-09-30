@@ -34,7 +34,8 @@ export type UploadRejectCode =
   | "no_print_area" // productType has no PrintArea for this placement
   | "bad_content_type" // not PNG/JPEG
   | "too_large" // exceeds the placement spec's max_file_mb
-  | "blob_missing"; // finalize: the URL isn't a blob in our own store
+  | "blob_missing" // finalize: the URL isn't a blob in our own store
+  | "design_locked"; // mockup approved — print files are immutable (new version needed)
 
 export class UploadRejectedError extends Error {
   readonly code: UploadRejectCode;
@@ -42,6 +43,18 @@ export class UploadRejectedError extends Error {
     super(message);
     this.name = "UploadRejectedError";
     this.code = code;
+  }
+}
+
+// An approved mockup locks the design's print files (data model §2, §4): a
+// change needs a NEW design. This early check is only a fast-fail; the real,
+// race-safe lock is inside persistPlacement's transaction.
+function assertNotLocked(design: { mockup_approved_at: Date | null }): void {
+  if (design.mockup_approved_at) {
+    throw new UploadRejectedError(
+      "design_locked",
+      "This design's mockup is approved; its print files are locked."
+    );
   }
 }
 
@@ -133,11 +146,12 @@ export async function uploadPlacement(input: {
   // indistinguishable (no existence leak).
   const design = await prisma.design.findFirst({
     where: { id: designId, merchantId },
-    select: { id: true, productTypeId: true },
+    select: { id: true, productTypeId: true, mockup_approved_at: true },
   });
   if (!design) {
     throw new UploadRejectedError("design_not_found", "Design not found.");
   }
+  assertNotLocked(design);
 
   // (2) Spec — the PrintArea for this design's productType + placement.
   const area = await prisma.printArea.findUnique({
@@ -199,11 +213,12 @@ async function resolveDesignSpec(
 ): Promise<PrintAreaSpec> {
   const design = await prisma.design.findFirst({
     where: { id: designId, merchantId },
-    select: { id: true, productTypeId: true },
+    select: { id: true, productTypeId: true, mockup_approved_at: true },
   });
   if (!design) {
     throw new UploadRejectedError("design_not_found", "Design not found.");
   }
+  assertNotLocked(design);
   const area = await prisma.printArea.findUnique({
     where: {
       productTypeId_placement: { productTypeId: design.productTypeId, placement },
@@ -227,21 +242,38 @@ async function persistPlacement(
   result: Awaited<ReturnType<typeof validatePrintFile>>
 ): Promise<UploadPlacementResult> {
   const mapped = toDesignPlacementValidation(result);
-  const row = await prisma.designPlacement.upsert({
-    where: { designId_placement: { designId, placement } },
-    create: {
-      designId,
-      placement,
-      print_file_url: printFileUrl,
-      validation_status: mapped.validation_status,
-      validation_notes: mapped.validation_notes,
-    },
-    update: {
-      print_file_url: printFileUrl,
-      validation_status: mapped.validation_status,
-      validation_notes: mapped.validation_notes,
-    },
-    select: { id: true },
+  const row = await prisma.$transaction(async (tx) => {
+    // Take the Design row lock FIRST: clearing the mockup (it no longer matches
+    // the files, so it must be regenerated and re-approved) only succeeds while
+    // the design is unapproved. An approval racing this write either commits
+    // first (count 0 → design_locked, nothing written) or finds mockup_url
+    // cleared and fails its own conditional update.
+    const unlocked = await tx.design.updateMany({
+      where: { id: designId, mockup_approved_at: null },
+      data: { mockup_url: null },
+    });
+    if (unlocked.count === 0) {
+      throw new UploadRejectedError(
+        "design_locked",
+        "This design's mockup is approved; its print files are locked."
+      );
+    }
+    return tx.designPlacement.upsert({
+      where: { designId_placement: { designId, placement } },
+      create: {
+        designId,
+        placement,
+        print_file_url: printFileUrl,
+        validation_status: mapped.validation_status,
+        validation_notes: mapped.validation_notes,
+      },
+      update: {
+        print_file_url: printFileUrl,
+        validation_status: mapped.validation_status,
+        validation_notes: mapped.validation_notes,
+      },
+      select: { id: true },
+    });
   });
   return { placementId: row.id, status: result.status, reasons: result.reasons };
 }
