@@ -82,10 +82,10 @@ export default async function MerchantDashboardPage({
     d.placements.some((p) => p.status === "FLAGGED")
   );
   const designStats = {
-    orderable: designs.filter((d) => d.orderable).length,
+    orderable: designs.filter((d) => d.orderable && d.mockupApproved).length,
     flagged: designFlagged.length,
     inProgress: designs.filter(
-      (d) => !d.orderable && !d.placements.some((p) => p.status === "FLAGGED")
+      (d) => !(d.orderable && d.mockupApproved) && !d.placements.some((p) => p.status === "FLAGGED")
     ).length,
   };
 

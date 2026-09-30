@@ -94,7 +94,7 @@ export default async function MerchantDesignsPage({
                         : d.productType.name_en}
                     </div>
                   </div>
-                  <OrderableBadge orderable={d.orderable} locale={locale} />
+                  <OrderableBadge orderable={d.orderable && d.mockupApproved} locale={locale} />
                 </div>
 
                 <div className="border-t border-hairline bg-inset/50 px-5 py-4">

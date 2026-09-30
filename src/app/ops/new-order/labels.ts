@@ -26,8 +26,8 @@ const UI = {
     ar: "يُطبَّق تصميم واحد على كل بنود هذا الطلب.",
   },
   noDesigns: {
-    en: "This merchant has no designs yet — create one before ordering.",
-    ar: "لا يملك هذا التاجر أي تصاميم بعد — أنشئ تصميمًا قبل الطلب.",
+    en: "This merchant has no orderable designs yet — a design needs validated print files and an approved mockup.",
+    ar: "لا يملك هذا التاجر أي تصاميم قابلة للطلب بعد — يحتاج التصميم إلى ملفات طباعة تم التحقق منها ونموذج معتمد.",
   },
 
   lines: { en: "Order lines", ar: "بنود الطلب" },
@@ -63,6 +63,10 @@ const UI = {
     en: "That design isn't orderable yet — every placement must be a validated (PASSED) print file.",
     ar: "هذا التصميم غير قابل للطلب بعد — يجب أن يكون كل موضع ملف طباعة تم التحقق منه (مقبول).",
   },
+  errDesignNotApproved: {
+    en: "That design's mockup hasn't been approved by the merchant yet — it can't be ordered until they approve it.",
+    ar: "لم يعتمد التاجر نموذج هذا التصميم بعد — لا يمكن طلبه قبل اعتماده.",
+  },
   errNoLines: {
     en: "Add at least one complete line (product, variant, method, qty).",
     ar: "أضف بندًا مكتملًا واحدًا على الأقل (منتج، نوع، طريقة، كمية).",
@@ -92,6 +96,8 @@ export function errorKeyFor(kind: string | undefined): NewOrderKey {
       return "errNoDesign";
     case "design_not_orderable":
       return "errDesignNotOrderable";
+    case "design_not_approved":
+      return "errDesignNotApproved";
     case "no_lines":
       return "errNoLines";
     case "bad_line":

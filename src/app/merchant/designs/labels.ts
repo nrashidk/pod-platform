@@ -11,8 +11,8 @@ const pick = (b: Bi, locale: Locale): string => (locale === "ar" ? b.ar : b.en);
 const UI = {
   title: { en: "My designs", ar: "تصاميمي" },
   subtitle: {
-    en: "Upload your print files. Each file is checked against the product's print spec — a design is orderable once every placement passes.",
-    ar: "ارفع ملفات الطباعة. يتم فحص كل ملف وفق مواصفات الطباعة للمنتج — يصبح التصميم قابلًا للطلب بمجرد نجاح كل المواضع.",
+    en: "Upload your print files. Each file is checked against the product's print spec — a design is orderable once every placement passes and you approve its mockup.",
+    ar: "ارفع ملفات الطباعة. يتم فحص كل ملف وفق مواصفات الطباعة للمنتج — يصبح التصميم قابلًا للطلب بمجرد نجاح كل المواضع واعتمادك للنموذج.",
   },
   backToOrders: { en: "← My orders", ar: "← طلباتي" },
   manageDesigns: { en: "Manage designs", ar: "إدارة التصاميم" },

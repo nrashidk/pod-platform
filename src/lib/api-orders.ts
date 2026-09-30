@@ -31,6 +31,7 @@ export type ApiErrorCode =
   | "unknown_sku" // 422 — SKU not found / inactive
   | "method_not_capable" // 422 — method isn't an active capability for that product
   | "invalid_design" // 422 — design_ref missing or not owned by this merchant
+  | "design_not_approved" // 422 — design's mockup not approved yet (files PASSED, but no approval)
   | "unroutable_line" // 422 — no eligible printer (UnroutableLineError)
   | "request_in_progress" // 409 — concurrent in-flight same idempotency key
   | "not_found" // 404 — order not owned by caller (no existence leak)
@@ -279,6 +280,19 @@ export async function apiCreateOrder(
         422,
         "invalid_design",
         `design_ref '${l.designRef}' is not orderable — every placement must be validated PASSED before it can be ordered.`,
+        { design_ref: l.designRef }
+      );
+    }
+    // Queue 14c: the merchant must have approved the mockup (which also locks
+    // the print files). Checked AFTER file validation so a bad-file design still
+    // gets the existing, more fundamental `invalid_design`. NOTE: this is a
+    // behaviour change for API clients — order lines on a design whose mockup is
+    // not approved used to be accepted.
+    if (!dz.approved) {
+      return err(
+        422,
+        "design_not_approved",
+        `design_ref '${l.designRef}' has no approved mockup — the merchant must approve the design's mockup before it can be ordered.`,
         { design_ref: l.designRef }
       );
     }

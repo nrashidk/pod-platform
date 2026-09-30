@@ -12,6 +12,7 @@
 //   • unknown SKU                                 → 422 unknown_sku
 //   • method not a capability                     → 422 method_not_capable
 //   • design_ref not owned by caller              → 422 invalid_design
+//   • own design, files PASSED, mockup unapproved → 422 design_not_approved (queue 14c)
 //   • valid-capability-but-unroutable line        → 422 unroutable_line (+ claim released)
 //   • foreign-merchant order fetch                → 404 not_found (no existence leak)
 //   • owner order fetch                           → 200
@@ -111,6 +112,8 @@ async function main() {
       merchantId: merchantA.id,
       name: "TESTAPI Design A",
       productTypeId: tshirtType.id,
+      // Queue 14c: orderable also needs an approved mockup.
+      mockup_approved_at: new Date(),
       placements: {
         create: {
           placement: "FRONT",
@@ -220,6 +223,31 @@ async function main() {
     lines: [{ sku: "TESTAPI-TEE-M", method: "DTG", quantity: 1, design_ref: designB.id }],
   }));
   check("foreign design_ref → 422 invalid_design", foreignDesign.httpStatus === 422 && (foreignDesign.body as any).error.code === "invalid_design");
+
+  // ── (7b) Queue 14c: own design, files PASSED, but mockup NOT approved →
+  // 422 design_not_approved, and nothing is written. ──
+  const designC = await prisma.design.create({
+    data: {
+      merchantId: merchantA.id,
+      name: "TESTAPI Design C (unapproved)",
+      productTypeId: tshirtType.id,
+      placements: {
+        create: {
+          placement: "FRONT",
+          print_file_url: "stub://print-files/testapi-front-c.png",
+          validation_status: "PASSED",
+        },
+      },
+    },
+  });
+  const ordersBeforeUnapproved = await prisma.order.count({ where: { merchantId: merchantA.id } });
+  const unapproved = await apiCreateOrder(AUTH_A, body({
+    idempotency_key: "idem-unapproved-design",
+    recipient,
+    lines: [{ sku: "TESTAPI-TEE-M", method: "DTG", quantity: 1, design_ref: designC.id }],
+  }));
+  check("unapproved design → 422 design_not_approved", unapproved.httpStatus === 422 && (unapproved.body as any).error.code === "design_not_approved");
+  check("unapproved design created no order", (await prisma.order.count({ where: { merchantId: merchantA.id } })) === ordersBeforeUnapproved);
 
   // ── (8) Valid-capability-but-unroutable line (card qty 1 < min_qty 50). ──
   const unroutable = await apiCreateOrder(AUTH_A, body({
