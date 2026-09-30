@@ -163,6 +163,12 @@ The builder never writes a ruling the owner did not give.
   ops screens (P11); placeholder product photos (P12); `contract_signed`
   required for routing (P15); owner reviews Arabic pre-launch (P16).
 
+### Owner ruling of 30 Sep 2026 (P4)
+- Recorded in full in `docs/build/decisions.md`. No minimum-printer-per-category
+  gate: a category is live at ≥1 capable printer; nothing enforced in code or
+  as a launch gate. Single-printer exposure accepted; §5b reserve is a
+  pre-launch owner decision. No build impact.
+
 ### Standing rulings (from CLAUDE.md and the data model, pre-dating this charter)
 - Money model: pure Printful, one flow, platform never holds buyer funds
   (data model §0, §9 "Resolved").

@@ -110,9 +110,11 @@ Owner actions before launch that came out of the 28 Sep 2026 rulings
 - [ ] Have an Arabic speaker review all Arabic UI copy (the builder's Arabic is
       marked "machine-drafted" in each PR).
 
-### 14. Printer count per product category (P4 — still open)
-- [ ] Aim for a 3rd and 4th capable printer per product category; with two,
-      rerouting and "remove a bad printer" have no teeth.
+### 14. Printer count per product category (P4 — RESOLVED, no gate)
+- No minimum-printer gate: a category goes live at ≥1 capable printer (owner
+  ruling, 30 Sep 2026). Depth grows as printers are onboarded.
+- [ ] Decide whether to fund the §5b self-insurance reserve (~2–4%) — the only
+      recovery backstop for an unrecoverable single-printer defect.
 
 ### 15. The blended shipping rate (P2)
 - [ ] Set the real blended shipping rate. The build ships with one

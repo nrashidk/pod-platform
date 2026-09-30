@@ -236,3 +236,25 @@ PR "Align data model with P3; resolve P17".
 - 2026-09-30 · queue 12 (estimated delivery) · which column holds the estimate, where the shipping days live, and what the fallback is → the schema already had `Fulfillment.estimated_delivery_days Int?` (the queue text says `estimated_delivery`), so that column is set rather than adding a date column; the value is `Printer.production_lead_days` (new, `Int` default 3) + shipping days from a new `ShippingLeadTime` table (country + optional emirate override, `emirate = ""` meaning the whole country; lookup emirate → country → `FALLBACK_SHIPPING_DAYS = 5`), computed in `persistRoutedOrder` (`src/lib/estimated-delivery.ts`) from the order's recipient country/emirate. The migration is additive (defaulted column, new table) and seeds placeholder starter rows (UAE 2 days, other GCC countries 4) — invented defaults for ops to tune once ops screens exist (queue 22+), not real carrier data. Shown as "N days" (correct Arabic number forms) on the ops order view and the merchant orders page; the printer page is unchanged. Existing fulfillments keep `null` (no backfill, charter rule 12). Arabic copy machine-drafted, owner to review (P16) · PR #21
 - 2026-09-30 · queue 13 (bleed check) · what `PrintArea.bleed_mm` means for the check → `width_mm`/`height_mm` stay the trim size and the print file must cover trim + `bleed_mm` on EACH side at `min_dpi` (so a 3 mm bleed on a 203×95 mm mug wrap needs ≥2469×1193 px, not 2398×1122); the same bleed-inclusive size is what the merchant sees under "What to upload" (`requiredPixelsWithBleed`, one formula for check and hint). A file that fills the trim area but not the bleed gets its own reason ("bleed missing: …") with bilingual merchant copy in `friendlyReason`; a file too small even for the trim keeps the old "dimensions … too small" reason, now quoting the bleed-inclusive size so one re-export fixes both. This is a dimension check only — the validator cannot tell whether the artwork actually extends into the margin. `bleed_mm = 0` behaves exactly as before. Existing PASSED placements are not re-validated (no data rewrite). No schema change. Arabic copy machine-drafted, owner to review (P16) · PR #22
 - 2026-09-30 · queue 14 (mockup generator) · what the mockup looks like, what it is built from, and what happens on regenerate → new `src/lib/mockup.ts`: one 600×600 SVG "[PLACEHOLDER]" panel per PASSED placement (P12) with the PrintArea drawn to scale and the stored print file composited into it (sharp only, no new dependency, no binary assets); several placements sit side by side in one PNG, stored through the PrintFileStore seam into the existing `Design.mockup_url` (no schema change). FLAGGED/unvalidated placements are never rendered, so a mockup can't be built from a bad file (DM §2). Text baked into the image is ASCII only (no guaranteed Arabic font; it is a watermark, not UI copy). Regenerating is free and unlimited until approved; if `mockup_approved_at` is ever set the generator refuses (`mockup_locked`) — the approval action itself is queue 14b. The mockup is served only through an ownership-gated signed-URL route like the print-file route · PR #23
+
+## Owner ruling — 30 Sep 2026 (P4)
+
+Source: owner, message to interactive session of 30 Sep 2026. Supersedes the
+"P4 · Printer count — no ruling given" note above.
+
+### P4 · Printer count per product category — RESOLVED
+- No minimum-printer-per-category gate. A product/category goes live as soon
+  as ≥1 capable printer is onboarded (already built: a ProductType is
+  listable only if ≥1 active PrinterCapability exists). No target count is
+  enforced in code or as a launch gate.
+- Rationale (owner): the platform must be live to market it and attract
+  printers; supply cannot be pre-committed. Depth grows organically.
+- Accepted exposure (documented, not a blocker): at 1 printer in a category,
+  §5b enforcement has no leverage — the 70/30 holdback and removal-from-network
+  threat are hollow, and reroute (queue 19) can only cancel/refund. Quality
+  then rests on the prevention layer (mockup approval, print-file validation,
+  mandatory first-article on bulk, 30-day reprint/refund). The §5b
+  self-insurance reserve (~2–4%) is the only recovery backstop for an
+  unrecoverable single-printer defect — owner to decide pre-launch.
+- Build impact: none. No queue item added, changed or unblocked. Closes the
+  last open parked question.

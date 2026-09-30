@@ -19,13 +19,7 @@ Format:
 
 ## Open
 
-### P4 · Printer count per product category
-- Raised: 2026-09-28 · data model §5b, §9 item 4
-- Why: with two printers, rerouting and "remove a bad printer" have no teeth.
-- What is needed from owner: a plan/target for a 3rd and 4th printer per
-  category before launch. No code needed.
-- Blocks: nothing in code. Also listed as a pre-launch business action in
-  `PRE-PRODUCTION.md`. The only 28 Sep 2026 question left without a ruling.
+None.
 
 ## Resolved
 
@@ -37,6 +31,7 @@ came out of them now live in `PRE-PRODUCTION.md`, not here.
 |---|---|---|
 | P1 | Licence + gateway | Build Stripe test-mode only; licence/gateway = go-live gate → PRE-PRODUCTION 5 |
 | P2 | Split shipping | One blended rate |
+| P4 | Printer count per category | No minimum-printer gate; category live at ≥1 capable printer (30 Sep 2026) |
 | P17 | Blended rate for every multi-parcel cause | Yes — always one blended rate per order, never per-parcel; data model §7 updated |
 | P3 | Routing weights | Three-tier routing → queue 6, 32 |
 | P5 | Design ownership | Merchant-scoped in code (already so); T&C → PRE-PRODUCTION 11 |
