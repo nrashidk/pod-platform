@@ -86,6 +86,32 @@ const UI = {
     en: "This mockup has been approved and is locked.",
     ar: "تم اعتماد هذه المعاينة وهي مقفلة.",
   },
+  mockupApprove: { en: "Approve mockup", ar: "اعتماد المعاينة" },
+  mockupApprovePending: { en: "Approving…", ar: "جارٍ الاعتماد…" },
+  mockupApproveHint: {
+    en: "Approving confirms this is the design you want printed. It locks your print files — to change anything later you will need to create a new design.",
+    ar: "الاعتماد يؤكد أن هذا هو التصميم الذي تريد طباعته، ويقفل ملفات الطباعة — لتغيير أي شيء لاحقًا ستحتاج إلى إنشاء تصميم جديد.",
+  },
+  mockupGenerateFirst: {
+    en: "Generate a mockup to review before approving.",
+    ar: "أنشئ معاينة لمراجعتها قبل الاعتماد.",
+  },
+  filesLocked: {
+    en: "Print files are locked because the mockup is approved. Create a new design to make changes.",
+    ar: "ملفات الطباعة مقفلة لأن المعاينة معتمدة. أنشئ تصميمًا جديدًا لإجراء أي تغيير.",
+  },
+  errDesignLocked: {
+    en: "This design's mockup is approved, so its print files are locked. Create a new design to make changes.",
+    ar: "تم اعتماد معاينة هذا التصميم، لذا فملفات الطباعة مقفلة. أنشئ تصميمًا جديدًا لإجراء أي تغيير.",
+  },
+  errMockupNone: {
+    en: "There is no current mockup to approve. Generate one first.",
+    ar: "لا توجد معاينة حالية للاعتماد. أنشئ واحدة أولًا.",
+  },
+  errMockupNotOrderable: {
+    en: "Every print file must pass validation before you can approve. Fix or re-upload the flagged files.",
+    ar: "يجب أن تجتاز جميع ملفات الطباعة التحقق قبل الاعتماد. أصلح الملفات المرفوضة أو أعد رفعها.",
+  },
   errMockupNothing: {
     en: "No passed print file to build a mockup from yet.",
     ar: "لا يوجد ملف طباعة مقبول لإنشاء المعاينة منه بعد.",
@@ -174,6 +200,8 @@ export function uploadErrorKey(kind: string): UiKey {
       return "errDesignNotFound";
     case "no_print_area":
       return "errNoPrintArea";
+    case "design_locked":
+      return "errDesignLocked";
     default:
       return "errGeneric";
   }
@@ -334,6 +362,10 @@ export function mockupErrorKey(kind: string): UiKey {
       return "errMockupNothing";
     case "mockup_locked":
       return "errMockupLocked";
+    case "no_mockup":
+      return "errMockupNone";
+    case "not_orderable":
+      return "errMockupNotOrderable";
     case "render_failed":
       return "errMockupRender";
     case "design_not_found":

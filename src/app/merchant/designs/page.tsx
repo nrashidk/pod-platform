@@ -15,6 +15,7 @@ import { OrderableBadge, DesignStatusBadge } from "../badges";
 import { CreateDesignForm } from "./CreateDesignForm";
 import { UploadPlacementForm } from "./UploadPlacementForm";
 import { GenerateMockupForm } from "./GenerateMockupForm";
+import { ApproveMockupForm } from "./ApproveMockupForm";
 import {
   dt,
   placementLabel,
@@ -158,13 +159,19 @@ export default async function MerchantDesignsPage({
                           </div>
                         )}
 
-                        <UploadPlacementForm
-                          locale={locale}
-                          designId={d.id}
-                          placement={p.placement}
-                          hasFile={p.status !== "NONE"}
-                          maxFileMb={p.max_file_mb}
-                        />
+                        {d.mockupApproved ? (
+                          <p className="mt-2 text-xs text-muted">
+                            {dt("filesLocked", locale)}
+                          </p>
+                        ) : (
+                          <UploadPlacementForm
+                            locale={locale}
+                            designId={d.id}
+                            placement={p.placement}
+                            hasFile={p.status !== "NONE"}
+                            maxFileMb={p.max_file_mb}
+                          />
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -190,11 +197,20 @@ export default async function MerchantDesignsPage({
                   {d.mockupApproved ? (
                     <p className="mt-2 text-sm text-muted">{dt("mockupLocked", locale)}</p>
                   ) : d.placements.some((p) => p.status === "PASSED") ? (
-                    <GenerateMockupForm
-                      locale={locale}
-                      designId={d.id}
-                      hasMockup={d.hasMockup}
-                    />
+                    <>
+                      <GenerateMockupForm
+                        locale={locale}
+                        designId={d.id}
+                        hasMockup={d.hasMockup}
+                      />
+                      {d.hasMockup && d.orderable ? (
+                        <ApproveMockupForm locale={locale} designId={d.id} />
+                      ) : (
+                        <p className="mt-2 text-sm text-muted">
+                          {dt(d.hasMockup ? "errMockupNotOrderable" : "mockupGenerateFirst", locale)}
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <p className="mt-2 text-sm text-muted">{dt("mockupNeedsFile", locale)}</p>
                   )}

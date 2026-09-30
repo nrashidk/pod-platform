@@ -17,7 +17,7 @@ import {
   UploadRejectedError,
 } from "@/lib/designs";
 import { getPrintFileStore } from "@/lib/print-file-store";
-import { generateMockup, MockupRejectedError } from "@/lib/mockup";
+import { approveMockup, generateMockup, MockupRejectedError } from "@/lib/mockup";
 
 export interface CreateDesignState {
   errorKind?: string;
@@ -139,6 +139,29 @@ export async function generateMockupAction(
   } catch (e) {
     if (e instanceof MockupRejectedError) return { errorKind: e.code };
     console.error("generateMockupAction failed:", e);
+    return { errorKind: "generic" };
+  }
+}
+
+// Approve (lock) the design's mockup. Independent MERCHANT re-check; merchantId
+// comes from the session only. Approval is timestamped and irreversible here.
+export async function approveMockupAction(
+  _prev: MockupState,
+  formData: FormData
+): Promise<MockupState> {
+  const ctx = await requireRole("MERCHANT");
+  if (!ctx.merchantId) return { errorKind: "no_merchant" };
+
+  const designId = String(formData.get("designId") ?? "").trim();
+  if (!designId) return { errorKind: "design_not_found" };
+
+  try {
+    await approveMockup({ merchantId: ctx.merchantId, designId });
+    revalidatePath("/merchant/designs");
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof MockupRejectedError) return { errorKind: e.code };
+    console.error("approveMockupAction failed:", e);
     return { errorKind: "generic" };
   }
 }

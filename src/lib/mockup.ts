@@ -24,6 +24,7 @@ import sharp from "sharp";
 import type { PlacementCode } from "@prisma/client";
 import { prisma } from "./prisma";
 import type { PrintFileStore } from "./print-file-store";
+import { isDesignOrderable } from "./designs";
 
 export const PANEL_PX = 600; // each placement panel is a square
 const AREA_MAX_PX = 380; // longest side of the drawn print area within a panel
@@ -33,6 +34,8 @@ export type MockupRejectCode =
   | "design_not_found" // not owned by this merchant (or doesn't exist)
   | "nothing_to_render" // no PASSED placement to render from
   | "mockup_locked" // already approved — a new version is needed to change it
+  | "no_mockup" // approve: nothing generated yet (or files changed since)
+  | "not_orderable" // approve: a placement is missing/FLAGGED — fix before locking
   | "render_failed"; // a stored print file could not be decoded
 
 export class MockupRejectedError extends Error {
@@ -205,4 +208,61 @@ export async function generateMockup(input: {
   if (updated.count === 0) throw new MockupRejectedError("mockup_locked");
 
   return { mockupUrl: stored.url, panels: sources.length };
+}
+
+/**
+ * Merchant approves the design's mockup — the timestamped lock on design intent
+ * (data model §2, §4). After this the design's print files are immutable
+ * (uploadPlacement / finalizePlacementUpload → design_locked) and the mockup
+ * cannot be regenerated; changing anything needs a NEW design.
+ *
+ *  1. ownership — design must belong to merchantId (else design_not_found)
+ *  2. already approved → mockup_locked
+ *  3. a current mockup must exist (any file change clears it → no_mockup)
+ *  4. every placement must be PASSED (not_orderable) — otherwise a FLAGGED
+ *     file would be locked in forever
+ *  5. stamp mockup_approved_at with a conditional write on the exact mockup
+ *     that was read, so a concurrent upload/regenerate cannot be approved stale
+ */
+export async function approveMockup(input: {
+  merchantId: string;
+  designId: string;
+}): Promise<{ approvedAt: Date }> {
+  const { merchantId, designId } = input;
+
+  const design = await prisma.design.findFirst({
+    where: { id: designId, merchantId },
+    select: {
+      id: true,
+      mockup_url: true,
+      mockup_approved_at: true,
+      placements: { select: { validation_status: true } },
+    },
+  });
+  if (!design) throw new MockupRejectedError("design_not_found");
+  if (design.mockup_approved_at) throw new MockupRejectedError("mockup_locked");
+  if (!design.mockup_url) throw new MockupRejectedError("no_mockup");
+  if (!isDesignOrderable(design.placements)) {
+    throw new MockupRejectedError("not_orderable");
+  }
+
+  const approvedAt = new Date();
+  const updated = await prisma.design.updateMany({
+    where: {
+      id: design.id,
+      merchantId,
+      mockup_approved_at: null,
+      mockup_url: design.mockup_url,
+    },
+    data: { mockup_approved_at: approvedAt },
+  });
+  if (updated.count === 0) {
+    // Lost a race: either someone approved it, or the mockup changed under us.
+    const now = await prisma.design.findFirst({
+      where: { id: design.id, merchantId },
+      select: { mockup_approved_at: true },
+    });
+    throw new MockupRejectedError(now?.mockup_approved_at ? "mockup_locked" : "no_mockup");
+  }
+  return { approvedAt };
 }
