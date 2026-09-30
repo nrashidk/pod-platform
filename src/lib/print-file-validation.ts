@@ -1,7 +1,7 @@
 // Print-file spec validation — the production-quality half of the two-file
 // pipeline (docs §2). The mockup is the buyer-approved *preview*; the print
 // file is the artifact actually sent to the printer and must pass spec
-// validation (DPI / dimensions / format / transparency / color / size) before
+// validation (DPI / dimensions / bleed / format / transparency / color / size) before
 // an order can leave for the printer. With no escrow, this is a load-bearing
 // safety layer, not a nice-to-have (docs §1).
 //
@@ -25,6 +25,10 @@ export type PrintAreaSpec = {
   color_profile: string; // e.g. "sRGB", "CMYK"
   requires_transparency: boolean; // true for DTG on dark garments
   max_file_mb: number;
+  // Extra artwork needed beyond the trim edge on EACH side (PrintArea.bleed_mm).
+  // width_mm/height_mm are the trim size; the file must cover trim + 2×bleed.
+  // Omitted/0 = no bleed requirement.
+  bleed_mm?: number;
 };
 
 // The uploaded file. A Buffer (not a path) so this works for real HTTP uploads
@@ -70,6 +74,16 @@ export function requiredPixels(mm: number, dpi: number): number {
   return Math.ceil((mm / MM_PER_INCH) * dpi);
 }
 
+// Pixels needed to fill the print area PLUS bleed on both sides. With no bleed
+// this equals requiredPixels(mm, dpi). Shared with the merchant read model.
+export function requiredPixelsWithBleed(
+  mm: number,
+  dpi: number,
+  bleedMm: number
+): number {
+  return requiredPixels(mm + 2 * Math.max(0, bleedMm), dpi);
+}
+
 /**
  * Validate an uploaded print file against a target PrintArea spec.
  * Returns PASSED, or FLAGGED with specific human-readable reasons.
@@ -77,7 +91,7 @@ export function requiredPixels(mm: number, dpi: number): number {
  * Checks (each contributes its own reason on failure):
  *  - format ∈ allowed_formats
  *  - embedded DPI ≥ min_dpi
- *  - enough pixels to fill the print area at min_dpi (effective resolution)
+ *  - enough pixels to fill the print area + bleed at min_dpi (effective resolution)
  *  - transparency: ONLY flags when spec.requires_transparency && !hasAlpha
  *  - file size ≤ max_file_mb
  *  - color profile matches (best-effort; sharp can't always read the ICC tag)
@@ -139,15 +153,28 @@ export async function validatePrintFile(
     reasons.push(`DPI ${densityDpi} below minimum ${spec.min_dpi}`);
   }
 
-  // 3. Effective resolution — enough pixels to fill the print area at min_dpi.
+  // 3. Effective resolution — enough pixels to fill the print area (plus bleed
+  //    on every side) at min_dpi. A file that fills the trim area but has no
+  //    room for the bleed gets its own, more specific reason.
   if (widthPx != null && heightPx != null) {
-    const reqW = requiredPixels(spec.width_mm, spec.min_dpi);
-    const reqH = requiredPixels(spec.height_mm, spec.min_dpi);
+    const bleed = Math.max(0, spec.bleed_mm ?? 0);
+    const reqW = requiredPixelsWithBleed(spec.width_mm, spec.min_dpi, bleed);
+    const reqH = requiredPixelsWithBleed(spec.height_mm, spec.min_dpi, bleed);
     if (widthPx < reqW || heightPx < reqH) {
-      reasons.push(
-        `dimensions ${widthPx}×${heightPx}px too small for ${spec.placement} ` +
-          `print area (needs ≥${reqW}×${reqH}px at ${spec.min_dpi} DPI)`
-      );
+      const trimW = requiredPixels(spec.width_mm, spec.min_dpi);
+      const trimH = requiredPixels(spec.height_mm, spec.min_dpi);
+      if (bleed > 0 && widthPx >= trimW && heightPx >= trimH) {
+        reasons.push(
+          `bleed missing: ${widthPx}×${heightPx}px leaves no room for ` +
+            `${bleed}mm bleed on each side of ${spec.placement} ` +
+            `(needs ≥${reqW}×${reqH}px at ${spec.min_dpi} DPI)`
+        );
+      } else {
+        reasons.push(
+          `dimensions ${widthPx}×${heightPx}px too small for ${spec.placement} ` +
+            `print area (needs ≥${reqW}×${reqH}px at ${spec.min_dpi} DPI)`
+        );
+      }
     }
   }
 

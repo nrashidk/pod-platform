@@ -25,7 +25,8 @@ const TSHIRT_FRONT: PrintAreaSpec = {
   requires_transparency: true,
   max_file_mb: 200,
 };
-// Mug WRAP: 203×95mm, 300 DPI min, PNG/JPEG, no transparency requirement.
+// Mug WRAP: 203×95mm trim + 3mm bleed each side, 300 DPI min, PNG/JPEG, no
+// transparency requirement. Needs ≥2469×1193px (trim 2398×1122 + bleed).
 const MUG_WRAP: PrintAreaSpec = {
   placement: "WRAP",
   width_mm: 203,
@@ -36,6 +37,7 @@ const MUG_WRAP: PrintAreaSpec = {
   color_profile: "sRGB",
   requires_transparency: false,
   max_file_mb: 100,
+  bleed_mm: 3,
 };
 
 // ── In-memory image generation ──
@@ -67,6 +69,7 @@ type Case = {
   img: ImgOpts;
   filename: string;
   expect: "PASSED" | "FLAGGED";
+  expectReason?: string; // substring one reason must contain
 };
 
 const cases: Case[] = [
@@ -96,6 +99,36 @@ const cases: Case[] = [
     spec: MUG_WRAP,
     img: { width: 2500, height: 1200, format: "JPEG", alpha: false, density: 300 },
     filename: "mug-wrap-good.jpg",
+    expect: "PASSED",
+  },
+  {
+    label: "Mug WRAP — fills trim (2400×1140) but no room for 3mm bleed",
+    spec: MUG_WRAP,
+    img: { width: 2400, height: 1140, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-no-bleed.jpg",
+    expect: "FLAGGED",
+    expectReason: "bleed missing",
+  },
+  {
+    label: "Mug WRAP — exactly trim + bleed (2469×1193)",
+    spec: MUG_WRAP,
+    img: { width: 2469, height: 1193, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-exact-bleed.jpg",
+    expect: "PASSED",
+  },
+  {
+    label: "Mug WRAP — one pixel short of bleed height (2469×1192)",
+    spec: MUG_WRAP,
+    img: { width: 2469, height: 1192, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-short-bleed.jpg",
+    expect: "FLAGGED",
+    expectReason: "bleed missing",
+  },
+  {
+    label: "Mug WRAP — bleed ignored when spec has none (2400×1140, bleed 0)",
+    spec: { ...MUG_WRAP, bleed_mm: 0 },
+    img: { width: 2400, height: 1140, format: "JPEG", alpha: false, density: 300 },
+    filename: "mug-wrap-no-bleed-spec.jpg",
     expect: "PASSED",
   },
   {
@@ -136,7 +169,9 @@ async function main() {
 
     const result = await validatePrintFile({ buffer, filename: c.filename }, c.spec);
     const mapped = toDesignPlacementValidation(result);
-    const ok = result.status === c.expect;
+    const ok =
+      result.status === c.expect &&
+      (!c.expectReason || result.reasons.some((r) => r.includes(c.expectReason!)));
     if (ok) pass++;
 
     console.log(`\n■ ${c.label}`);
