@@ -168,6 +168,10 @@ model Printer {
 
   payout_terms String? // free-text for now (e.g. "upfront full <1000 AED; 70/30 bulk")
 
+  // SLA: days from routing to hand-over to the carrier. Feeds the estimated
+  // delivery (production_lead_days + shipping days to the destination).
+  production_lead_days Int @default(3)
+
   capabilities PrinterCapability[]
   fulfillments Fulfillment[]      // order layer: fulfillments routed to this printer
   users        User[]             // back-office PRINTER logins scoped to this printer
@@ -613,6 +617,7 @@ model Fulfillment {
   wholesale_cost Decimal        @db.Decimal(12, 2) // what platform owes printer
 
   // Estimated delivery shown at checkout = production_lead + shipping_time.
+  // Set at routing (src/lib/estimated-delivery.ts).
   estimated_delivery_days Int?
 
   // Units currently reserved on printer.current_load_units for this fulfillment
@@ -898,4 +903,16 @@ model Verification {
   updatedAt DateTime @updatedAt
 
   @@index([identifier])
+}
+
+// Shipping days from a printer to a destination, used for the estimated
+// delivery. One row per country, plus optional per-emirate overrides
+// (emirate = "" means "the whole country"). Editable by ops later (queue 22+).
+model ShippingLeadTime {
+  id      String @id @default(cuid())
+  country String              // ISO code, e.g. "AE"
+  emirate String @default("") // "" = any emirate in the country
+  days    Int
+
+  @@unique([country, emirate])
 }

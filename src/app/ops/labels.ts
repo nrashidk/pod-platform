@@ -117,9 +117,18 @@ const SHIP = {
     en: "Enter a proof-of-delivery reference to mark this delivered.",
     ar: "أدخل مرجع إثبات التسليم لتأكيد التسليم.",
   },
+  estimatedDelivery: { en: "Estimated delivery", ar: "التسليم المتوقع" },
 } satisfies Record<string, Bi>;
 export const shipT = (key: keyof typeof SHIP, locale: Locale): string =>
   pick(SHIP[key], locale);
+
+/** "5 days" / "٥ أيام"-style duration with correct Arabic number forms. */
+export function daysText(n: number, locale: Locale): string {
+  if (locale !== "ar") return `${n} ${n === 1 ? "day" : "days"}`;
+  if (n === 1) return "يوم واحد";
+  if (n === 2) return "يومان";
+  return `${n} ${n >= 3 && n <= 10 ? "أيام" : "يومًا"}`;
+}
 
 export type UiKey = keyof typeof UI;
 export const t = (key: UiKey, locale: Locale): string => pick(UI[key], locale);

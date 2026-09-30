@@ -20,6 +20,7 @@ import {
   methodLabel,
   orderStatusLabel,
   shipT,
+  daysText,
   t,
 } from "./labels";
 import { advanceAction, firstArticleAction, podPhotoAction } from "./actions";
@@ -177,6 +178,13 @@ export default async function OpsPage({
                                 label={fulfillmentStatusLabel(f.status, locale)}
                               />
                             </div>
+
+                            {f.estimated_delivery_days != null && (
+                              <p className="mt-2 text-sm text-gray-700">
+                                <span className="font-medium">{shipT("estimatedDelivery", locale)}:</span>{" "}
+                                {daysText(f.estimated_delivery_days, locale)}
+                              </p>
+                            )}
 
                             {/* Shipment (carrier + tracking), created at dispatch */}
                             {f.shipments[0] && (

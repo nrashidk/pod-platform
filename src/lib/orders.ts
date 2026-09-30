@@ -37,6 +37,7 @@
 
 import type { OrderOrigination, Prisma, PrintMethod } from "@prisma/client";
 import { prisma } from "./prisma";
+import { estimatedDeliveryDays, shippingDaysFor } from "./estimated-delivery";
 import { PrinterCapacityError, reservePrinterLoad } from "./printer-load";
 import { findEligiblePrinters } from "./routing";
 
@@ -277,6 +278,17 @@ export async function persistRoutedOrder(
     },
   });
 
+  const shippingDays = await shippingDaysFor(
+    tx,
+    input.recipient.country ?? "AE",
+    input.recipient.emirate
+  );
+  const printers = await tx.printer.findMany({
+    where: { id: { in: fulfillmentPlans.map((fp) => fp.printerId) } },
+    select: { id: true, production_lead_days: true },
+  });
+  const leadByPrinter = new Map(printers.map((p) => [p.id, p.production_lead_days]));
+
   const fulfillments: PersistedFulfillment[] = [];
   for (const fp of fulfillmentPlans) {
     const fulfillment = await tx.fulfillment.create({
@@ -287,6 +299,10 @@ export async function persistRoutedOrder(
         status: "ROUTED", // printer assigned
         wholesale_cost: fp.wholesale_cost.toFixed(2),
         is_bulk: fp.is_bulk,
+        estimated_delivery_days: estimatedDeliveryDays(
+          leadByPrinter.get(fp.printerId) ?? 0,
+          shippingDays
+        ),
         first_article_required: fp.is_bulk, // mandatory on bulk
         // hold_status defaults NONE; hold amounts left null — retention
         // engine is deferred this phase.
