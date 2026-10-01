@@ -193,6 +193,10 @@ Source: owner, interactive session of 1 Oct 2026. Recorded in the docs-only PR
   creation — artwork/logo, shape, size — stored on the design, shown on the
   mockup, sent to the printer with the job. Distinct from the packing slip
   (§6). Sub-choices needing an owner decision are parked.
+- `OrderStatus.AWAITING_APPROVAL` / `APPROVED` are now legacy: no buyer
+  approval state exists. They stay in the enum (removing values would touch
+  existing data — charter rule 12); the 14c gate checks the product's design
+  instead. Retiring them is parked (`parked.md`).
 - **Buyer-side personalisation at order time is NOT in v1.**
 
 ## Builder decisions
