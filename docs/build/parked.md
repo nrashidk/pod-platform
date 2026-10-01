@@ -19,6 +19,12 @@ Format:
 
 ## Open
 
+### P18-a · Retire legacy order approval states
+- Raised: 2026-10-01 · owner ruling P18
+- Why: `OrderStatus.AWAITING_APPROVAL` / `APPROVED` no longer match the model (approval is a product-creation step). Removing enum values touches existing data (charter rule 12); harmless meanwhile.
+- What is needed from owner: OK to retire them via a `needs-human` migration (or keep as dead values).
+- Blocks: nothing.
+
 ### P4 · Printer count per product category
 - Raised: 2026-09-28 · data model §5b, §9 item 4
 - Why: with two printers, rerouting and "remove a bad printer" have no teeth.

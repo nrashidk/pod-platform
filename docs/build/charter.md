@@ -163,6 +163,14 @@ The builder never writes a ruling the owner did not give.
   ops screens (P11); placeholder product photos (P12); `contract_signed`
   required for routing (P15); owner reviews Arabic pre-launch (P16).
 
+### Owner ruling of 1 Oct 2026 (P18)
+- Recorded in full in `docs/build/decisions.md`. Product creation (blank,
+  colour, variants, artwork, garment brand label) is a one-time MERCHANT act;
+  confirming = `approveMockup` and locks the design. The BUYER never approves
+  a mockup — they order a finished, pre-approved product. The order gate
+  (queue 14c) checks the product's `mockup_approved_at` + print files PASSED.
+  Garment brand label = queue 14d. Buyer-side personalisation is not in v1.
+
 ### Standing rulings (from CLAUDE.md and the data model, pre-dating this charter)
 - Money model: pure Printful, one flow, platform never holds buyer funds
   (data model §0, §9 "Resolved").

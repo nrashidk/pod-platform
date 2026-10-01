@@ -20,7 +20,7 @@ The platform never holds buyer funds — not even on its own storefront. There i
 
 `Order.origination` ∈ { `OWN_STORE`, `CONNECTED_STORE` } still exists, but only to distinguish *who owns the customer relationship and brand* — **not** to switch money models. The money flow is identical for both. Own-store = the platform owner is also the store owner.
 
-**Consequence — accept on purpose:** with no held funds, quality is guaranteed *only* by (1) locked mockup approval, (2) print-file spec validation, (3) the 30-day reprint/refund policy. There is no escrow backstop. This makes print-file validation a load-bearing safety layer, not a nice-to-have. The earlier "hold money to guarantee quality" idea is permanently dead.
+**Consequence — accept on purpose:** with no held funds, quality is guaranteed *only* by (1) the merchant's locked design approval at product creation, (2) print-file spec validation, (3) the 30-day reprint/refund policy. There is no escrow backstop. This makes print-file validation a load-bearing safety layer, not a nice-to-have. The earlier "hold money to guarantee quality" idea is permanently dead.
 
 License note: still need the right UAE entity + gateway to operate a store and bill for fulfillment, but you are NOT a custodian of third-party consumer funds — which is the lighter regulatory position. (You are handling license research.)
 
@@ -89,12 +89,16 @@ Mockup ≠ print file. Two distinct artifacts, two distinct roles.
 
 | | Mockup | Print file |
 |---|---|---|
-| Purpose | On-screen preview the buyer approves | Artwork actually sent to printer |
+| Purpose | On-screen preview the merchant approves once, when creating the product | Artwork actually sent to printer |
 | Fidelity | Reference only | Production-grade |
-| Validation | Visual approval (buyer) | Spec validation (system): DPI, dimensions, format, color profile, transparency |
-| Failure mode | Buyer dislikes design → revise (free, unlimited) | Low-res / wrong format → FLAGGED before order can proceed |
+| Validation | Visual approval (merchant, at product creation) | Spec validation (system): DPI, dimensions, format, color profile, transparency |
+| Failure mode | Merchant dislikes design → revise (free, unlimited, until approved) | Low-res / wrong format → FLAGGED before order can proceed |
 
-**Rule:** buyer approval of the mockup locks the *design intent*; print-file spec validation locks the *production quality*. Both must pass before an order leaves for the printer. A pretty mockup built from a bad print file must still be blocked at upload — this is what protects the liability split.
+**Rule:** the merchant's approval of the mockup (product creation — see below) locks the *design intent*; print-file spec validation locks the *production quality*. Both must pass before an order leaves for the printer. A pretty mockup built from a bad print file must still be blocked at upload — this is what protects the liability split.
+
+**Product creation (owner ruling P18, 1 Oct 2026 — Printful model):** creating a product is a **merchant** act, done **once**. The merchant chooses the blank (e.g. V-neck, long-sleeve), colour and the sizes/variants to sell; places artwork/text on front and/or back; sets the garment brand label (inside-neck, see below); and confirms. Confirming = `approveMockup`: it stamps `mockup_approved_at` and locks the design's print files. The product is then store-ready for any number of orders. No inventory is made or held. **The buyer never approves a mockup**: a buyer orders a finished, already-approved product from the merchant's linked store (own storefront, Shopify, Instagram, …), choosing variant and quantity. Buyer-side personalisation at order time is NOT in v1 — merchant-created products only.
+
+**Garment brand label (inside-neck):** set by the merchant during product creation — label artwork/logo, shape, size — stored on the design, shown on the mockup, and sent to the printer with the job. Distinct from the white-label packing slip (§6), which is parcel branding.
 
 **Embroidery sub-pipeline (point 3):** if `requires_digitization`, the design goes through a digitization step producing a stitch file; the digitization preview (more accurate than the mockup) becomes the approval artifact for that line.
 
@@ -168,12 +172,18 @@ Per order:
 ## 4. Order lifecycle (states)
 
 ```
-DRAFT
-  → design created, mockup generated, buyer iterates (unlimited free revisions)
+PRODUCT CREATION (merchant, once — not part of any order)
+  → merchant builds the product: blank, colour, variants, artwork, garment label;
+    mockup generated, merchant iterates (unlimited free revisions)
+  MOCKUP_APPROVED          ← merchant confirms: locks design intent (mockup_approved_at)
+  PRINT_FILE_VALIDATED     ← system confirms file passes spec (PASSED)
+  The product is then store-ready for any number of orders.
 
-MOCKUP_APPROVED            ← buyer locks design intent (timestamped)
-PRINT_FILE_VALIDATED       ← system confirms file passes spec (PASSED)
-  (both required to proceed)
+ORDER LIFECYCLE begins here — an order AGAINST an already-approved product
+(buyer picks product + variant + quantity; there is no buyer mockup-approval state).
+DRAFT
+  → order gate: the ordered product's design must have mockup_approved_at set AND
+    print files PASSED — properties of the product, set at creation
   estimated_delivery shown at checkout = production_lead_days + shipping_time,
   computed per order from the assigned printer + carrier.
 
@@ -204,7 +214,7 @@ No payment-release timer. Printful does not escrow buyer funds or gate printer p
 | Manufacturing error / damaged / misprint | Provider (printer) | Free reprint or refund; no product return required; photo proof; claim ≤30 days from receipt |
 | Buyer remorse (wrong size chosen, changed mind) | Buyer | Not covered; replacement at buyer's/merchant's expense |
 | Print ≠ approved mockup | Printer | Free reprint (failed to execute approved design) |
-| Design wrong *as approved* | Buyer | Not covered (mockup approval was the contract) |
+| Design wrong *as approved* | Merchant | Not covered (the merchant's approval at product creation was the contract) |
 | Printer can't fulfill after assignment | Platform ops | Reroute to alternate capable printer, else refund |
 | Lost in transit (confirmed) | Carrier → platform covers | Replacement reship |
 | Undeliverable (bad address / unclaimed) | Buyer/merchant | Returns to printer, held 30 days; contact customer; reship is paid |

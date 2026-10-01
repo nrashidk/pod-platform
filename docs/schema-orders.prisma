@@ -27,8 +27,8 @@ enum OrderOrigination {
 // never the source of truth. Compute from fulfillments.
 enum OrderStatus {
   DRAFT
-  AWAITING_APPROVAL // mockup not yet locked
-  APPROVED          // mockup locked + all print files validated
+  AWAITING_APPROVAL // legacy (P18): approval is a product-creation step, not an order state
+  APPROVED          // legacy (P18): the order gate checks the product's design instead
   PAID
   ROUTED
   IN_PRODUCTION
@@ -185,7 +185,7 @@ model StoreConnection {
 // DESIGN  (the two-file pipeline: mockup vs print file)
 // ─────────────────────────────────────────────────────────────
 
-// A reusable design. The MOCKUP is the buyer-approved preview. The PRINT FILES
+// A reusable design. The MOCKUP is the merchant-approved preview (P18). The PRINT FILES
 // live per placement (one design can print on FRONT + BACK = two files).
 // A design can be applied across multiple products/orders.
 model Design {
@@ -197,7 +197,7 @@ model Design {
   // Mockup preview (reference only — NOT production).
   mockup_url    String?
 
-  // Buyer approval = the contract on design intent (timestamped lock).
+  // Merchant approval at product creation = the contract on design intent (timestamped lock, P18).
   mockup_approved_at DateTime?
 
   placements    DesignPlacement[]
