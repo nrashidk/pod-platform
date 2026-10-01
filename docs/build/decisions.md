@@ -165,6 +165,36 @@ PR "Align data model with P3; resolve P17".
   in `decisions.md` when queue 32 is built.
 - Affects: queue 29, 32; data model §7 updated; parked P17 → resolved.
 
+## Owner rulings — 1 Oct 2026 (P18, product-creation model)
+
+Source: owner, interactive session of 1 Oct 2026. Recorded in the docs-only PR
+"Apply owner ruling P18".
+
+### P18 · Product creation is a merchant act; buyers never approve mockups
+- **Supersedes** the earlier wording (data model §2/§4, queue 14c) in which the
+  BUYER approves the mockup per order. The platform follows Printful's
+  product-creation flow.
+- Product creation is done **once, by the merchant**: choose the blank
+  (V-neck, long-sleeve…), colour and variants to sell; place artwork/text on
+  front and/or back; set the garment brand label; confirm. Confirming =
+  `approveMockup` (queue 14b): stamps the design and locks its print files.
+  The product is then store-ready for any number of orders. No inventory is
+  made or held.
+- The BUYER never approves a mockup: they order a finished, already-approved
+  product from the merchant's linked store (own storefront, Shopify,
+  Instagram…), choosing variant and quantity. The order pipeline
+  (route → produce → ship → deliver) is unchanged.
+- Data model §2 and §4 updated accordingly; the order lifecycle begins at an
+  order against an already-approved product (no buyer mockup-approval state).
+- Queue 14c: the gate checks the ordered product's design has
+  `mockup_approved_at` set and print files PASSED. Queue 28 (checkout) and 33
+  (Shopify) are built for finished products — no mockup-approval step.
+- New queue item 14d: **garment brand label** (inside-neck) set at product
+  creation — artwork/logo, shape, size — stored on the design, shown on the
+  mockup, sent to the printer with the job. Distinct from the packing slip
+  (§6). Sub-choices needing an owner decision are parked.
+- **Buyer-side personalisation at order time is NOT in v1.**
+
 ## Builder decisions
 
 - 2026-09-28 · queue 1 (wallet lost update in billing) · how to make the smoke
