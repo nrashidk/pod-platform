@@ -275,11 +275,27 @@ async function main() {
     emptyOrder.httpStatus === 422 && (emptyOrder.body as any).error.code === "invalid_design"
   );
 
+  // Queue 14c: PASSED files alone are not enough — the mockup must be approved.
+  const unapprovedOrder = await apiCreateOrder(
+    AUTH_A,
+    body({ idempotency_key: "dm-unapproved", recipient, lines: [line(d1.id)] })
+  );
+  check(
+    "order API: PASSED but mockup-unapproved design → 422 design_not_approved",
+    unapprovedOrder.httpStatus === 422 &&
+      (unapprovedOrder.body as any).error.code === "design_not_approved"
+  );
+  check(
+    "order API: unapproved design created no order",
+    (await prisma.order.count({ where: { merchantId: merchantA.id } })) === 0
+  );
+  await prisma.design.update({ where: { id: d1.id }, data: { mockup_approved_at: new Date() } });
+
   const passedOrder = await apiCreateOrder(
     AUTH_A,
     body({ idempotency_key: "dm-passed", recipient, lines: [line(d1.id)] })
   );
-  check("order API: fully-PASSED design → 201 created", passedOrder.httpStatus === 201);
+  check("order API: PASSED + mockup-approved design → 201 created", passedOrder.httpStatus === 201);
 
   // ── (6) Ownership: A cannot SEE or ATTACH B's design. ──
   const dB = await createDesign({

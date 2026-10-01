@@ -351,10 +351,18 @@ export async function finalizePlacementUpload(input: {
 // ─────────────────────────────────────────────────────────────
 // ORDERABILITY RULE — the single source of truth, enforced at the data layer.
 //
-// A design is orderable iff it has ≥1 placement AND every placement it has is
-// PASSED. A FRONT-only shirt design is legitimately orderable. NOTE: if a
-// product type ever REQUIRES a specific placement, that's a future `required`
-// flag on PrintArea — NOT a change to this rule.
+// Two conditions (data model §2 rule: "both must pass before an order leaves
+// for the printer"):
+//   1. FILES — the design has ≥1 placement AND every placement it has is
+//      PASSED (`isDesignOrderable`, below). A FRONT-only shirt design is
+//      legitimately orderable. NOTE: if a product type ever REQUIRES a specific
+//      placement, that's a future `required` flag on PrintArea — NOT a change to
+//      this rule.
+//   2. MOCKUP — the merchant approved the mockup (`mockup_approved_at` set,
+//      queue 14b). Approving locks the files, so (1) cannot regress afterwards.
+// An order line needs BOTH (queue 14c). `isDesignOrderable` stays the files-only
+// check because the approval action itself needs it (you approve *before* you
+// can order).
 // ─────────────────────────────────────────────────────────────
 
 export function isDesignOrderable(
@@ -367,24 +375,34 @@ export function isDesignOrderable(
 }
 
 /**
- * For a set of design ids, return per-id { owned, orderable } scoped to the
- * merchant. Used by the order entry points (API + ops form) to reject designs
- * that aren't owned OR aren't fully PASSED. Ids not owned by the merchant are
- * present with owned:false (so callers can give a precise but non-leaky error).
+ * For a set of design ids, return per-id { owned, orderable, approved } scoped to
+ * the merchant. `orderable` = every placement PASSED (files); `approved` = the
+ * merchant approved the mockup (queue 14c). Used by the order entry points (API
+ * + ops form) to reject designs that aren't owned, aren't fully PASSED, or
+ * aren't approved. Ids not owned by the merchant are present with owned:false
+ * (so callers can give a precise but non-leaky error).
  */
 export async function getDesignOrderability(
   merchantId: string,
   designIds: string[]
-): Promise<Map<string, { owned: boolean; orderable: boolean }>> {
+): Promise<Map<string, { owned: boolean; orderable: boolean; approved: boolean }>> {
   const ids = [...new Set(designIds)];
   const owned = await prisma.design.findMany({
     where: { id: { in: ids }, merchantId },
-    select: { id: true, placements: { select: { validation_status: true } } },
+    select: {
+      id: true,
+      mockup_approved_at: true,
+      placements: { select: { validation_status: true } },
+    },
   });
-  const result = new Map<string, { owned: boolean; orderable: boolean }>();
-  for (const id of ids) result.set(id, { owned: false, orderable: false });
+  const result = new Map<string, { owned: boolean; orderable: boolean; approved: boolean }>();
+  for (const id of ids) result.set(id, { owned: false, orderable: false, approved: false });
   for (const d of owned) {
-    result.set(d.id, { owned: true, orderable: isDesignOrderable(d.placements) });
+    result.set(d.id, {
+      owned: true,
+      orderable: isDesignOrderable(d.placements),
+      approved: d.mockup_approved_at !== null,
+    });
   }
   return result;
 }

@@ -69,6 +69,7 @@ export async function createOrderAction(
       where: { id: designId },
       select: {
         merchantId: true,
+        mockup_approved_at: true,
         placements: { select: { validation_status: true } },
       },
     }),
@@ -93,6 +94,10 @@ export async function createOrderAction(
   // not be orderable — even though the page only OFFERS orderable designs.
   if (!isDesignOrderable(design.placements)) {
     return { errorKind: "design_not_orderable" };
+  }
+  // Queue 14c: the merchant must also have approved the mockup.
+  if (design.mockup_approved_at === null) {
+    return { errorKind: "design_not_approved" };
   }
 
   const byProduct = new Map(products.map((p) => [p.id, p]));
