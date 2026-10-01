@@ -165,6 +165,40 @@ PR "Align data model with P3; resolve P17".
   in `decisions.md` when queue 32 is built.
 - Affects: queue 29, 32; data model §7 updated; parked P17 → resolved.
 
+## Owner rulings — 1 Oct 2026 (P18, product-creation model)
+
+Source: owner, interactive session of 1 Oct 2026. Recorded in the docs-only PR
+"Apply owner ruling P18".
+
+### P18 · Product creation is a merchant act; buyers never approve mockups
+- **Supersedes** the earlier wording (data model §2/§4, queue 14c) in which the
+  BUYER approves the mockup per order. The platform follows Printful's
+  product-creation flow.
+- Product creation is done **once, by the merchant**: choose the blank
+  (V-neck, long-sleeve…), colour and variants to sell; place artwork/text on
+  front and/or back; set the garment brand label; confirm. Confirming =
+  `approveMockup` (queue 14b): stamps the design and locks its print files.
+  The product is then store-ready for any number of orders. No inventory is
+  made or held.
+- The BUYER never approves a mockup: they order a finished, already-approved
+  product from the merchant's linked store (own storefront, Shopify,
+  Instagram…), choosing variant and quantity. The order pipeline
+  (route → produce → ship → deliver) is unchanged.
+- Data model §2 and §4 updated accordingly; the order lifecycle begins at an
+  order against an already-approved product (no buyer mockup-approval state).
+- Queue 14c: the gate checks the ordered product's design has
+  `mockup_approved_at` set and print files PASSED. Queue 28 (checkout) and 33
+  (Shopify) are built for finished products — no mockup-approval step.
+- New queue item 14d: **garment brand label** (inside-neck) set at product
+  creation — artwork/logo, shape, size — stored on the design, shown on the
+  mockup, sent to the printer with the job. Distinct from the packing slip
+  (§6). Sub-choices needing an owner decision are parked.
+- `OrderStatus.AWAITING_APPROVAL` / `APPROVED` are now legacy: no buyer
+  approval state exists. They stay in the enum (removing values would touch
+  existing data — charter rule 12); the 14c gate checks the product's design
+  instead. Retiring them is parked (`parked.md`).
+- **Buyer-side personalisation at order time is NOT in v1.**
+
 ## Builder decisions
 
 - 2026-09-28 · queue 1 (wallet lost update in billing) · how to make the smoke
@@ -237,4 +271,4 @@ PR "Align data model with P3; resolve P17".
 - 2026-09-30 · queue 13 (bleed check) · what `PrintArea.bleed_mm` means for the check → `width_mm`/`height_mm` stay the trim size and the print file must cover trim + `bleed_mm` on EACH side at `min_dpi` (so a 3 mm bleed on a 203×95 mm mug wrap needs ≥2469×1193 px, not 2398×1122); the same bleed-inclusive size is what the merchant sees under "What to upload" (`requiredPixelsWithBleed`, one formula for check and hint). A file that fills the trim area but not the bleed gets its own reason ("bleed missing: …") with bilingual merchant copy in `friendlyReason`; a file too small even for the trim keeps the old "dimensions … too small" reason, now quoting the bleed-inclusive size so one re-export fixes both. This is a dimension check only — the validator cannot tell whether the artwork actually extends into the margin. `bleed_mm = 0` behaves exactly as before. Existing PASSED placements are not re-validated (no data rewrite). No schema change. Arabic copy machine-drafted, owner to review (P16) · PR #22
 - 2026-09-30 · queue 14 (mockup generator) · what the mockup looks like, what it is built from, and what happens on regenerate → new `src/lib/mockup.ts`: one 600×600 SVG "[PLACEHOLDER]" panel per PASSED placement (P12) with the PrintArea drawn to scale and the stored print file composited into it (sharp only, no new dependency, no binary assets); several placements sit side by side in one PNG, stored through the PrintFileStore seam into the existing `Design.mockup_url` (no schema change). FLAGGED/unvalidated placements are never rendered, so a mockup can't be built from a bad file (DM §2). Text baked into the image is ASCII only (no guaranteed Arabic font; it is a watermark, not UI copy). Regenerating is free and unlimited until approved; if `mockup_approved_at` is ever set the generator refuses (`mockup_locked`) — the approval action itself is queue 14b. The mockup is served only through an ownership-gated signed-URL route like the print-file route · PR #23
 - 2026-09-30 · queue 14b (mockup approval + lock) · when a merchant may approve, what locks, and what "new version" means → MERCHANT-only action `approveMockup` (`src/lib/mockup.ts`): needs a current mockup and EVERY placement PASSED (otherwise a FLAGGED file would be locked in forever), then stamps `mockup_approved_at` with a conditional write on the exact `mockup_url` it read. Once approved, both upload paths (`uploadPlacement`, `finalizePlacementUpload`) and the direct-upload token route refuse with `design_locked`; the merchant UI hides the upload forms and the generator already refuses (`mockup_locked`). The lock is race-safe: `persistPlacement` first takes the Design row lock with a conditional `updateMany(mockup_approved_at: null)` inside one transaction, so an approval and a replacing upload can never both win. Any accepted file change also clears `mockup_url` (the mockup no longer matches the files, so it must be regenerated and re-approved — prevents approving a stale preview). Approval is irreversible from the merchant side; there is no un-approve. "New version" = create a new Design (the existing create-design flow); no clone/versioning schema was added (simplest, reversible; the approved design and its history stay intact). The order gate that requires approval is queue 14c, so existing ordering behaviour is unchanged here. No schema change. Arabic copy machine-drafted, owner to review (P16) · PR #24
-- 2026-09-30 · queue 14c (order gate on approval) · where the gate sits, what error it returns, what stays unchanged → the gate lives at the two merchant-facing entry points only (API intake `apiCreateOrder` and the ops new-order action), next to the existing files-PASSED check, via `getDesignOrderability` (now also returns `approved`) and `Design.mockup_approved_at`. The API returns a NEW stable code `design_not_approved` (422, after the file check so a bad-file design still gets `invalid_design`); the ops form returns errorKind `design_not_approved` with EN/AR copy and its design picker now lists only approved designs. `isDesignOrderable` stays files-only because the approve action itself needs it. Internal library calls (`createOrderWithRouting*`, seeds, smoke fixtures) are deliberately not gated — they are not merchant-facing entry points, and gating them would only force every fixture to fake an approval. Merchant UI: the "Orderable" badge and dashboard count now require approval too. API behaviour change for clients: lines on a design without an approved mockup are now rejected (422) where they were accepted before. No schema change, no data rewrite. Arabic copy machine-drafted, owner to review (P16) · PR #25
+- 2026-09-30 · queue 14c (order gate on approval) · where the gate sits, what error it returns, what stays unchanged → the gate lives at the two merchant-facing entry points only (API intake `apiCreateOrder` and the ops new-order action), next to the existing files-PASSED check, via `getDesignOrderability` (now also returns `approved`) and `Design.mockup_approved_at`. The API returns a NEW stable code `design_not_approved` (422, after the file check so a bad-file design still gets `invalid_design`); the ops form returns errorKind `design_not_approved` with EN/AR copy and its design picker now lists only approved designs. `isDesignOrderable` stays files-only because the approve action itself needs it. Internal library calls (`createOrderWithRouting*`, seeds, smoke fixtures) are deliberately not gated — they are not merchant-facing entry points, and gating them would only force every fixture to fake an approval. Merchant UI: the "Orderable" badge and dashboard count now require approval too. API behaviour change for clients: lines on a design without an approved mockup are now rejected (422) where they were accepted before. No schema change, no data rewrite. Arabic copy machine-drafted, owner to review (P16) · PR #26
